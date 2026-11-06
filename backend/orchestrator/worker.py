@@ -1,6 +1,17 @@
 import os
 import sys
 import asyncio
+
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -128,8 +139,15 @@ class AutonomousWorker:
             "ERROR": "[ERR]"
         }
         icon = level_icons.get(level, "[*]")
-        # Prominent console line for the user running the terminal
-        print(f"[{time_str}] {icon} [{stage.upper()}] {message}", flush=True)
+        line = f"[{time_str}] {icon} [{stage.upper()}] {message}"
+        try:
+            print(line, flush=True)
+        except (UnicodeEncodeError, Exception):
+            try:
+                safe_line = line.encode("ascii", errors="replace").decode("ascii")
+                print(safe_line, flush=True)
+            except Exception:
+                pass
 
         if self.db_path:
             try:
@@ -356,7 +374,7 @@ class AutonomousWorker:
                 rendered_clips.append(str(mock_clip))
             else:
                 for s_idx, scene in enumerate(plan.scenes):
-                    self._log(f"Rendering scene {s_idx + 1}/{len(plan.scenes)}: {scene.environment_type} with camera {scene.camera_movement}...", stage="3D RENDER", level="INFO")
+                    self._log(f"Rendering scene {s_idx + 1}/{len(plan.scenes)}: {scene.generator_type} with camera {scene.camera_motion}...", stage="3D RENDER", level="INFO")
                     clip_path = await self.blender_runner.render_scene_async(
                         scene=scene,
                         output_dir=str(work_dir / f"scene_{scene.scene_id}"),

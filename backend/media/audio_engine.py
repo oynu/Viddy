@@ -13,6 +13,15 @@ class AudioEngine:
     def __init__(self, default_voice: str = "en-US-ChristopherNeural"):
         self.default_voice = default_voice
 
+    async def synthesize_speech(
+        self,
+        text: str,
+        output_path: str,
+        voice: Optional[str] = None
+    ) -> Tuple[str, float]:
+        """Alias for generate_voiceover."""
+        return await self.generate_voiceover(text, output_path, voice)
+
     async def generate_voiceover(
         self,
         text: str,

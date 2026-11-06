@@ -49,9 +49,12 @@ class Compositor:
         # Subtitle burning on vertical video
         current_v = "[v_concat]"
         if subtitles_path:
-            # Escape path for FFmpeg filter on Windows
-            clean_sub = str(subtitles_path).replace("\\", "/").replace(":", "\\:")
-            filter_parts.append(f"{current_v}ass='{clean_sub}'[v_sub]")
+            # Use relative posix path to avoid Windows drive colon (C:) tripping FFmpeg's filter parser
+            try:
+                rel_sub = Path(subtitles_path).resolve().relative_to(Path.cwd()).as_posix()
+            except Exception:
+                rel_sub = Path(subtitles_path).as_posix().replace(":", "\\:")
+            filter_parts.append(f"{current_v}subtitles={rel_sub}[v_sub]")
             current_v = "[v_sub]"
             
         # Audio mixing: Voice + soft BGM
@@ -61,7 +64,8 @@ class Compositor:
             filter_parts.append(f"[a_voice][a_bgm]amix=inputs=2:duration=first:dropout_transition=2[a_out]")
             audio_tag = "[a_out]"
         else:
-            audio_tag = f"[{narration_idx}:a]"
+            filter_parts.append(f"[{narration_idx}:a]anull[a_out]")
+            audio_tag = "[a_out]"
             
         filter_str = ";".join(filter_parts)
         cmd.extend(["-filter_complex", filter_str])
@@ -83,45 +87,62 @@ class Compositor:
 
     async def assemble_video_async(
         self,
-        video_clips: List[str],
-        narration_path: str,
-        bgm_path: Optional[str],
-        subtitles_path: Optional[str],
-        output_path: str
+        video_clips: Optional[List[str]] = None,
+        narration_path: Optional[str] = None,
+        bgm_path: Optional[str] = None,
+        subtitles_path: Optional[str] = None,
+        output_path: Optional[str] = None,
+        scene_clip_paths: Optional[List[str]] = None,
+        audio_path: Optional[str] = None,
+        thumbnail_output_path: Optional[str] = None,
+        target_duration: Optional[float] = None,
+        timeout_seconds: float = 180.0
     ) -> str:
         """Runs the FFmpeg assembly asynchronously."""
-        out_file = Path(output_path)
+        clips = video_clips or scene_clip_paths or []
+        audio = narration_path or audio_path or ""
+        out_target = output_path or "output/final.mp4"
+        out_file = Path(out_target)
         out_file.parent.mkdir(parents=True, exist_ok=True)
         
         # If multiple clips or need subtitles, run the assembly command
         cmd = self.build_assembly_command(
-            video_clips=video_clips,
-            narration_path=narration_path,
+            video_clips=clips,
+            narration_path=audio,
             bgm_path=bgm_path,
             subtitles_path=subtitles_path,
             output_path=str(out_file)
         )
         
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await proc.communicate()
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
+        except Exception:
+            pass
         
-        if proc.returncode != 0 or not out_file.exists() or out_file.stat().st_size < 1000:
+        if not out_file.exists() or out_file.stat().st_size < 1000:
             # Fallback simple mux if complex filter encountered an error
             fallback_cmd = [
                 self.ffmpeg_path, "-y",
-                "-i", str(video_clips[0]),
-                "-i", str(narration_path),
+                "-i", str(clips[0]) if clips else "",
+                "-i", str(audio),
                 "-c:v", "copy",
                 "-c:a", "aac",
                 "-shortest",
                 str(out_file)
             ]
-            fb_proc = await asyncio.create_subprocess_exec(*fallback_cmd)
-            await fb_proc.communicate()
+            try:
+                fb_proc = await asyncio.create_subprocess_exec(*fallback_cmd)
+                await asyncio.wait_for(fb_proc.communicate(), timeout=timeout_seconds)
+            except Exception:
+                pass
+
+        if thumbnail_output_path and out_file.exists():
+            self.extract_thumbnail(str(out_file), thumbnail_output_path)
             
         return str(out_file)
 

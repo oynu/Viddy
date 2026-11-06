@@ -1,9 +1,21 @@
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 class SubtitleGenerator:
     def __init__(self):
         pass
+
+    def generate_ass_subtitles(
+        self,
+        script_blocks: Optional[List[str]] = None,
+        text: Optional[str] = None,
+        total_duration: float = 30.0,
+        output_ass_path: Optional[str] = None,
+        output_path: Optional[str] = None
+    ) -> str:
+        full_text = text or " ".join(script_blocks or [])
+        out = output_ass_path or output_path or "subtitles.ass"
+        return self.generate_styled_ass(full_text, total_duration, out)
 
     def generate_styled_ass(
         self,
