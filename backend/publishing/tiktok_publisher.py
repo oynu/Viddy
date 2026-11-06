@@ -8,11 +8,13 @@ class TikTokPublishResult(BaseModel):
     success: bool
     publish_id: Optional[str] = None
     url: Optional[str] = None
+    comment_posted: bool = False
     error_message: Optional[str] = None
 
 class TikTokPublisher:
     """
-    Handles authentication and publishing via TikTok Content Posting API v2.
+    Handles authentication and publishing via TikTok Content Posting API v2,
+    including automated posting of the viral first pinned comment.
     """
     def __init__(self, client_key: Optional[str] = None, client_secret: Optional[str] = None):
         self.client_key = client_key or os.getenv("TIKTOK_CLIENT_KEY")
@@ -44,20 +46,41 @@ class TikTokPublisher:
                 }
         return None
 
+    async def post_comment(self, video_id: str, comment_text: str, access_token: str) -> bool:
+        """
+        Publishes the first pinned engagement comment directly to the video on TikTok.
+        """
+        try:
+            url = "https://open.tiktokapis.com/v2/comment/create/"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json; charset=UTF-8"
+            }
+            body = {
+                "item_id": video_id,
+                "text": comment_text
+            }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                res = await client.post(url, headers=headers, json=body)
+                return res.status_code == 200
+        except Exception:
+            return False
+
     async def publish_video(
         self,
         video_path: str,
         caption: str,
         access_token: Optional[str],
+        comment_text: Optional[str] = None,
         privacy_level: str = "PUBLIC_TO_EVERYONE"
     ) -> TikTokPublishResult:
         """
-        Initiates and uploads short-form video to TikTok Creator account.
+        Initiates, uploads short-form video to TikTok, and automatically publishes the pinned comment.
         """
-        if not access_token:
+        if not access_token or access_token == "mock_access_token_demo":
             return TikTokPublishResult(
                 success=False,
-                error_message="TikTok OAuth authentication required. Please connect your TikTok account in the settings dashboard."
+                error_message="TikTok OAuth token required for direct headless API upload. Connect account with token or use 1-Click Web Upload."
             )
             
         if not os.path.exists(video_path):
@@ -74,7 +97,7 @@ class TikTokPublisher:
         }
         
         post_info = {
-            "title": caption[:150],
+            "title": caption[:2200],  # Full caption with viral hashtags
             "privacy_level": privacy_level,
             "disable_duet": False,
             "disable_stitch": False,
@@ -123,10 +146,15 @@ class TikTokPublisher:
                 
                 upload_res = await client.put(upload_url, headers=upload_headers, content=content)
                 if upload_res.status_code in (200, 201):
+                    comment_posted = False
+                    if comment_text and publish_id:
+                        comment_posted = await self.post_comment(publish_id, comment_text, access_token)
+                        
                     return TikTokPublishResult(
                         success=True,
                         publish_id=publish_id,
-                        url=f"https://www.tiktok.com/@creator/video/{publish_id}"
+                        url=f"https://www.tiktok.com/@creator/video/{publish_id}",
+                        comment_posted=comment_posted
                     )
                 else:
                     return TikTokPublishResult(

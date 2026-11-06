@@ -15,6 +15,7 @@ class PublishRequest(BaseModel):
     tags: List[str] = Field(default_factory=list)
     tiktok_caption: Optional[str] = None
     tiktok_hashtags: Optional[str] = None
+    tiktok_commentary: Optional[str] = None
     thumbnail_path: Optional[str] = None
     destinations: List[str] = Field(default_factory=lambda: ["local"])
 
@@ -132,7 +133,8 @@ class PublishingManager:
                 res = await self.tiktok_pub.publish_video(
                     video_path=req.video_path,
                     caption=caption,
-                    access_token=token
+                    access_token=token,
+                    comment_text=req.tiktok_commentary
                 )
                 results.append(PublishResult(
                     platform="tiktok",

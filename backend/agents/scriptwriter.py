@@ -1,4 +1,5 @@
-from typing import List, Optional
+import re
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 from backend.agents.researcher import ResearchedConcept
 
@@ -8,7 +9,7 @@ class VideoScript(BaseModel):
     narration_blocks: List[str] = Field(default_factory=list)
     full_narration: str = ""
     call_to_action: str = "Follow for daily mind-bending science!"
-    estimated_duration: float = 35.0
+    estimated_duration: float = 38.0
     on_screen_texts: List[str] = Field(default_factory=list)
     tiktok_caption: str = ""
     tiktok_hashtags: str = ""
@@ -18,7 +19,11 @@ class VideoScript(BaseModel):
     youtube_tags: List[str] = Field(default_factory=list)
 
 class ScriptwritingAgent:
-    def __init__(self, target_wpm: int = 140):
+    """
+    Transforms researched scientific discoveries into high-retention,
+    cinematic educational scripts tailored for vertical short-form video.
+    """
+    def __init__(self, target_wpm: int = 145):
         self.target_wpm = target_wpm
 
     def _generate_tiktok_hashtags(self, category: str, title: str) -> str:
@@ -28,7 +33,6 @@ class ScriptwritingAgent:
         2. STEM / Education authority tags
         3. Topic-specific category tags
         """
-        # FYP + STEM authority staples
         core_tags = ["#fyp", "#foryou", "#foryoupage", "#viral", "#trending", "#learnontiktok", "#stemtok", "#sciencetok", "#factsdaily", "#whatif"]
         
         category_tags_map = {
@@ -51,7 +55,6 @@ class ScriptwritingAgent:
         if not selected_cat_tags:
             selected_cat_tags = ["#science", "#physics", "#mindblown", "#curiosity", "#education"]
 
-        # Deduplicate while preserving order
         all_tags = []
         for tag in core_tags + selected_cat_tags:
             if tag not in all_tags:
@@ -64,7 +67,7 @@ class ScriptwritingAgent:
         Generates a viral first pinned comment designed to trigger debate,
         theories, and comments to maximize TikTok engagement signals.
         """
-        clean_title = concept.title.replace('What if ', '').replace('How does ', '').rstrip('?')
+        clean_title = concept.title.replace('What if ', '').replace('How does ', '').replace(' happened tomorrow?', '').rstrip('?')
         
         if "what if" in concept.title.lower():
             return (
@@ -84,72 +87,102 @@ class ScriptwritingAgent:
 
     def generate_script(self, concept: ResearchedConcept) -> VideoScript:
         """
-        Synthesizes researched scientific facts into a viral, high-retention 30-45s script.
+        Synthesizes researched scientific facts into an elaborate, captivating, high-retention script.
         """
-        # 1. Attention-grabbing opening hook
-        hook = f"What if {concept.title.replace('What if ', '').replace('How does ', '').rstrip('?')}?"
+        title_clean = concept.title.replace(' happened tomorrow?', '').rstrip('?')
+        topic_subject = title_clean.replace('What if ', '').replace('How does ', '').replace('Why does ', '')
+
+        # 1. Cinematic Visceral Opening Hook
         if concept.hook_angle:
-            hook = f"Imagine this: {concept.hook_angle}."
-            
-        # 2. Narration narrative blocks
-        blocks = []
-        # Opening shock
-        blocks.append(hook)
-        
-        # Primary consequence from fact 1
+            hook = f"Picture this: {concept.hook_angle}. If {topic_subject.lower()} occurred right now, the universe as you know it would shatter."
+        elif "what if" in concept.title.lower():
+            hook = f"What if you woke up tomorrow and {topic_subject.lower()}? Before your brain could even process what was happening, the laws of physics would retaliate."
+        else:
+            hook = f"Have you ever wondered how {topic_subject.lower()} actually works? The scientific reality is far more extreme than most people realize."
+
+        blocks = [hook]
+
+        # 2. Immediate Consequence / Real-world stakes
         if len(concept.key_facts) > 0:
-            blocks.append(f"Within seconds, {concept.key_facts[0].lower()}")
-            
-        # Scientific explanation from fact 2
+            fact_1 = concept.key_facts[0]
+            blocks.append(
+                f"Within the very first seconds, {fact_1.lower().rstrip('.')}. "
+                f"Every calculation scientists have ever relied on would instantly collapse into total chaos."
+            )
+        else:
+            blocks.append(
+                f"Within seconds, equilibrium vanishes. The fundamental forces that hold matter together begin cascading out of control."
+            )
+
+        # 3. Scientific Deep-Dive (The Mechanism)
         if len(concept.key_facts) > 1:
-            blocks.append(f"Why? Because {concept.key_facts[1].lower()}")
-            
-        # Escalation / Twist from fact 3
+            fact_2 = concept.key_facts[1]
+            blocks.append(
+                f"Here is the mind-bending scientific reason why: {fact_2.rstrip('.')}. "
+                f"This isn't theoretical speculation—it is governed by strict mathematical conservation laws."
+            )
+        else:
+            blocks.append(
+                f"Why does this happen? Because when energy gradients shift, thermodynamic entropy forces an instantaneous reallocation of mass and velocity."
+            )
+
+        # 4. Mind-Blowing Escalation / Hidden Truth
         if len(concept.key_facts) > 2:
-            blocks.append(f"Even crazier, {concept.key_facts[2].lower()}")
-            
-        cta = "Which cosmic mystery should we unravel next? Drop a comment and follow Viddy!"
+            fact_3 = concept.key_facts[2]
+            blocks.append(
+                f"Even more astonishing, {fact_3.lower().rstrip('.')}. "
+                f"This proves that our baseline reality is balanced on an impossibly fragile cosmic razor's edge."
+            )
+        else:
+            blocks.append(
+                f"Even crazier: if this state persisted for just twenty-four hours, the cascading planetary effects would become completely irreversible."
+            )
+
+        # 5. High-Converting Engaging Call-to-Action
+        cta = "Which cosmic mystery should Viddy simulate next? Drop your craziest theories in the comments and follow for daily mind-bending science!"
         blocks.append(cta)
-        
+
         full_text = " ".join(blocks)
         word_count = len(full_text.split())
         estimated_duration = round((word_count / self.target_wpm) * 60.0, 1)
-        
-        # Key on-screen text highlights
+
+        # On-screen text kinetic highlights
         on_screen_texts = [
-            concept.title.upper(),
+            title_clean.upper(),
+            "COSMIC INSTABILITY",
             "PHYSICS COLLAPSE",
-            "WHAT HAPPENS NEXT?"
+            "THE HIDDEN TRUTH"
         ]
-        
-        # Algorithm-optimized hashtags and viral commentary
+
         cat = getattr(concept, "category", "science")
         tiktok_hashtags = self._generate_tiktok_hashtags(cat, concept.title)
         tiktok_commentary = self._generate_tiktok_commentary(concept)
-        
-        # Optimized TikTok caption with viral hook + tags
-        tiktok_caption = f"{concept.title} 🤯 Science breakdown you didn't know!\n\n{tiktok_hashtags}"
-        
-        # YouTube Shorts metadata
+
+        # High-CTR TikTok caption
+        tiktok_caption = (
+            f"{title_clean} 🤯 The science breakdown that changes everything!\n\n"
+            f"{tiktok_hashtags}"
+        )
+
         youtube_tags = ["#shorts", "#science", "#education", "#physics", "#whatif", "#viddy", "#learn"]
-        youtube_title = f"{concept.title} #shorts"
-        
+        youtube_title = f"{title_clean} #shorts"
+
         sources_str = ", ".join(concept.scientific_sources) if concept.scientific_sources else "Verified Academic Sources"
         youtube_description = (
-            f"{concept.title}\n\n"
+            f"{title_clean}\n\n"
             f"{full_text}\n\n"
-            f"Sources: {sources_str}\n"
+            f"Sources & Citations: {sources_str}\n"
             f"Produced autonomously by Viddy AI Video Studio.\n\n"
             f"{tiktok_hashtags}"
         )
-        
+
         return VideoScript(
-            title=concept.title,
+            title=title_clean,
             hook=hook,
             narration_blocks=blocks,
             full_narration=full_text,
             call_to_action=cta,
-            estimated_duration=max(25.0, min(58.0, estimated_duration)),
+            estimated_duration=max(30.0, min(55.0, estimated_duration)),
             on_screen_texts=on_screen_texts,
             tiktok_caption=tiktok_caption,
             tiktok_hashtags=tiktok_hashtags,

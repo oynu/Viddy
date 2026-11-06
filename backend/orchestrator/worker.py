@@ -58,6 +58,9 @@ class AutonomousWorker:
         cycle_delay_seconds: int = 10,
         simulated_media: bool = False
     ):
+        if db_path is None:
+            from backend.config import settings
+            db_path = str(settings.base_dir / "data" / "viddy.db")
         self.db_path = db_path
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
@@ -499,6 +502,7 @@ class AutonomousWorker:
             tags=script.youtube_tags,
             tiktok_caption=script.tiktok_caption,
             tiktok_hashtags=script.tiktok_hashtags,
+            tiktok_commentary=script.tiktok_commentary,
             thumbnail_path=thumbnail_path,
             destinations=destinations
         )

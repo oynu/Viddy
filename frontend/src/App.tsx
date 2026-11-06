@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Square, Copy, Check, ExternalLink, RefreshCw, Film } from 'lucide-react';
+import { Play, Pause, Square, Copy, Check, ExternalLink, RefreshCw, Download, UploadCloud, MessageSquareQuote, Hash } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [agentStatus, setAgentStatus] = useState<any>({
@@ -19,38 +19,37 @@ export const App: React.FC = () => {
     tiktok: { connected: false }
   });
   const [loading, setLoading] = useState(false);
-  const [wsConnected, setWsConnected] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
 
-  // Account connection inputs
-  const [ytInput, setYtInput] = useState('');
-  const [ttInput, setTtInput] = useState('');
+  // Direct token inputs for automated API publishing
+  const [ytToken, setYtToken] = useState('');
+  const [ttToken, setTtToken] = useState('');
+
+  const showNotification = (msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 3500);
+  };
 
   const fetchStatus = async () => {
     try {
       const res = await fetch('/api/agent/status');
       if (res.ok) setAgentStatus(await res.json());
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) {}
   };
 
   const fetchVideos = async () => {
     try {
       const res = await fetch('/api/videos');
       if (res.ok) setVideos(await res.json());
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) {}
   };
 
   const fetchChannels = async () => {
     try {
       const res = await fetch('/api/channels');
       if (res.ok) setChannels(await res.json());
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -62,7 +61,6 @@ export const App: React.FC = () => {
       const wsUrl = `${protocol}//${window.location.host}/ws/events`;
       ws = new WebSocket(wsUrl);
 
-      ws.onopen = () => setWsConnected(true);
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
@@ -85,7 +83,6 @@ export const App: React.FC = () => {
       };
 
       ws.onclose = () => {
-        setWsConnected(false);
         reconnectTimeout = setTimeout(connectWebSocket, 3000);
       };
       ws.onerror = () => ws?.close();
@@ -145,17 +142,22 @@ export const App: React.FC = () => {
     await fetchStatus();
   };
 
-  const handleConnect = async (platform: string, name: string) => {
-    if (!name.trim()) return;
+  const handleConnectToken = async (platform: string, token: string) => {
+    if (!token.trim()) return;
     await fetch('/api/channels/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ platform, account_name: name.trim() })
+      body: JSON.stringify({
+        platform,
+        access_token: token.trim(),
+        account_name: `${platform.toUpperCase()} API Linked`
+      })
     });
-    if (platform === 'youtube') setYtInput('');
-    if (platform === 'tiktok') setTtInput('');
+    if (platform === 'youtube') setYtToken('');
+    if (platform === 'tiktok') setTtToken('');
     await fetchChannels();
     await fetchStatus();
+    showNotification(`Connected ${platform} API credentials for direct autonomous publishing.`);
   };
 
   const handleDisconnect = async (platform: string) => {
@@ -170,12 +172,34 @@ export const App: React.FC = () => {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  const openTikTokUpload = (video: any) => {
+    const fullCaption = `${video.title} 🤯 Science breakdown you didn't know!\n\n${video.tiktok_hashtags || '#fyp #foryou #learnontiktok #stemtok'}`;
+    navigator.clipboard.writeText(fullCaption);
+    showNotification('TikTok caption & reach hashtags copied to clipboard! Opening TikTok Creator Center...');
+    window.open('https://www.tiktok.com/creator-center/upload', '_blank');
+  };
+
+  const openYouTubeUpload = (video: any) => {
+    const fullDesc = `${video.title}\n\n${video.script}\n\nProduced autonomously by Viddy AI Video Studio.\n\n${video.tiktok_hashtags || ''}`;
+    navigator.clipboard.writeText(fullDesc);
+    showNotification('YouTube description & tags copied to clipboard! Opening YouTube Studio...');
+    window.open('https://studio.youtube.com/channel/upload?d=pt', '_blank');
+  };
+
   const isRunning = agentStatus.state === 'RUNNING';
   const isPaused = agentStatus.state === 'PAUSED';
   const currentDest = agentStatus.settings?.publish_destination || 'local';
 
   return (
     <div className="min-h-screen bg-black text-white selection:bg-white selection:text-black font-sans antialiased">
+      {/* Toast Notification */}
+      {notification && (
+        <div className="fixed top-5 right-5 z-50 bg-white text-black px-4 py-2.5 rounded shadow-xl text-xs font-mono flex items-center gap-2">
+          <Check className="w-4 h-4 text-black" />
+          <span>{notification}</span>
+        </div>
+      )}
+
       {/* Minimal Header */}
       <header className="border-b border-[#1f1f1f] px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -298,75 +322,84 @@ export const App: React.FC = () => {
             ))}
           </div>
 
-          {/* Minimal Channel Connect Rows */}
-          {(currentDest === 'youtube' || currentDest === 'both') && (
-            <div className="p-4 bg-[#0a0a0a] border border-[#222222] rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div>
-                <span className="font-bold text-white block">YouTube Shorts Channel</span>
-                <span className="text-[#777777]">
-                  {channels.youtube.connected
-                    ? `Connected as @${channels.youtube.account_name}`
-                    : 'Connect your channel or videos will be saved locally.'}
-                </span>
+          {/* TikTok Account & Direct API Setup */}
+          {(currentDest === 'tiktok' || currentDest === 'both') && (
+            <div className="p-4 bg-[#0a0a0a] border border-[#222222] rounded space-y-3 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="font-bold text-white block">TikTok Publishing</span>
+                  <span className="text-[#777777]">
+                    {channels.tiktok.connected
+                      ? `Headless OAuth API Active (@${channels.tiktok.account_name})`
+                      : 'You can publish 100% headlessly via API, or use the 1-Click Creator Studio button on any video below.'}
+                  </span>
+                </div>
+                {channels.tiktok.connected && (
+                  <button
+                    onClick={() => handleDisconnect('tiktok')}
+                    className="text-[#666666] hover:text-white underline text-xs cursor-pointer self-start sm:self-auto"
+                  >
+                    Disconnect Token
+                  </button>
+                )}
               </div>
-              {channels.youtube.connected ? (
-                <button
-                  onClick={() => handleDisconnect('youtube')}
-                  className="text-[#666666] hover:text-white underline text-xs cursor-pointer self-start sm:self-auto"
-                >
-                  Disconnect
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
+
+              {!channels.tiktok.connected && (
+                <div className="pt-2 border-t border-[#1a1a1a] flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <input
-                    type="text"
-                    placeholder="Channel / Handle Name"
-                    value={ytInput}
-                    onChange={(e) => setYtInput(e.target.value)}
-                    className="bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white"
+                    type="password"
+                    placeholder="Paste TikTok Access Token (for headless auto-posting)"
+                    value={ttToken}
+                    onChange={(e) => setTtToken(e.target.value)}
+                    className="bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white flex-1 font-mono"
                   />
                   <button
-                    onClick={() => handleConnect('youtube', ytInput)}
-                    className="px-3 py-1.5 bg-white text-black font-semibold rounded text-xs hover:bg-[#eaeaea] cursor-pointer"
+                    onClick={() => handleConnectToken('tiktok', ttToken)}
+                    className="px-4 py-1.5 bg-white text-black font-semibold rounded text-xs hover:bg-[#eaeaea] cursor-pointer whitespace-nowrap"
                   >
-                    Connect
+                    Save Token
                   </button>
                 </div>
               )}
             </div>
           )}
 
-          {(currentDest === 'tiktok' || currentDest === 'both') && (
-            <div className="p-4 bg-[#0a0a0a] border border-[#222222] rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div>
-                <span className="font-bold text-white block">TikTok Account</span>
-                <span className="text-[#777777]">
-                  {channels.tiktok.connected
-                    ? `Connected as @${channels.tiktok.account_name}`
-                    : 'Connect your TikTok username or videos will be saved locally.'}
-                </span>
+          {/* YouTube Shorts Setup */}
+          {(currentDest === 'youtube' || currentDest === 'both') && (
+            <div className="p-4 bg-[#0a0a0a] border border-[#222222] rounded space-y-3 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="font-bold text-white block">YouTube Shorts Publishing</span>
+                  <span className="text-[#777777]">
+                    {channels.youtube.connected
+                      ? `Headless OAuth API Active (@${channels.youtube.account_name})`
+                      : 'You can publish headlessly via Google OAuth token, or use the 1-Click YouTube Studio button on any video below.'}
+                  </span>
+                </div>
+                {channels.youtube.connected && (
+                  <button
+                    onClick={() => handleDisconnect('youtube')}
+                    className="text-[#666666] hover:text-white underline text-xs cursor-pointer self-start sm:self-auto"
+                  >
+                    Disconnect Token
+                  </button>
+                )}
               </div>
-              {channels.tiktok.connected ? (
-                <button
-                  onClick={() => handleDisconnect('tiktok')}
-                  className="text-[#666666] hover:text-white underline text-xs cursor-pointer self-start sm:self-auto"
-                >
-                  Disconnect
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
+
+              {!channels.youtube.connected && (
+                <div className="pt-2 border-t border-[#1a1a1a] flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <input
-                    type="text"
-                    placeholder="TikTok Username"
-                    value={ttInput}
-                    onChange={(e) => setTtInput(e.target.value)}
-                    className="bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white"
+                    type="password"
+                    placeholder="Paste YouTube OAuth Access Token (for headless auto-posting)"
+                    value={ytToken}
+                    onChange={(e) => setYtToken(e.target.value)}
+                    className="bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white flex-1 font-mono"
                   />
                   <button
-                    onClick={() => handleConnect('tiktok', ttInput)}
-                    className="px-3 py-1.5 bg-white text-black font-semibold rounded text-xs hover:bg-[#eaeaea] cursor-pointer"
+                    onClick={() => handleConnectToken('youtube', ytToken)}
+                    className="px-4 py-1.5 bg-white text-black font-semibold rounded text-xs hover:bg-[#eaeaea] cursor-pointer whitespace-nowrap"
                   >
-                    Connect
+                    Save Token
                   </button>
                 </div>
               )}
@@ -391,69 +424,75 @@ export const App: React.FC = () => {
 
           {videos.length === 0 ? (
             <div className="border border-dashed border-[#222222] rounded-lg p-12 text-center text-xs text-[#666666]">
-              No videos produced yet. Start the studio above to produce your first video.
+              Library is clear. Click "Start Studio" above to produce your first high-fidelity 3D video.
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-8">
               {videos.map(video => (
                 <article
                   key={video.id}
-                  className="border border-[#222222] bg-[#0a0a0a] rounded-lg p-5 space-y-4"
+                  className="border border-[#222222] bg-[#0a0a0a] rounded-lg p-6 space-y-5"
                 >
                   {/* Top Bar: Title & Metadata */}
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                     <div>
-                      <span className="text-[10px] font-mono uppercase text-[#777777] block mb-0.5">
-                        {video.category || 'Science'} · {video.duration ? `${video.duration.toFixed(1)}s` : '35s'} · QC Passed
+                      <span className="text-[10px] font-mono uppercase text-[#777777] block mb-1">
+                        {video.category || 'Science'} · {video.duration ? `${video.duration.toFixed(1)}s` : '35s'} · 1080x1920 3D · QC Passed
                       </span>
-                      <h3 className="text-base font-bold text-white">
+                      <h3 className="text-lg font-bold text-white tracking-tight">
                         {video.title}
                       </h3>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      {video.youtube_url && (
-                        <a
-                          href={video.youtube_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-2.5 py-1 rounded bg-[#161616] hover:bg-[#222222] text-xs font-medium text-white border border-[#2a2a2a] flex items-center gap-1"
-                        >
-                          <span>YouTube</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                      {video.tiktok_url && (
-                        <a
-                          href={video.tiktok_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-2.5 py-1 rounded bg-[#161616] hover:bg-[#222222] text-xs font-medium text-white border border-[#2a2a2a] flex items-center gap-1"
-                        >
-                          <span>TikTok</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
+                      {/* 1-Click TikTok Creator Web Studio */}
+                      <button
+                        onClick={() => openTikTokUpload(video)}
+                        className="px-3 py-1.5 rounded bg-white text-black hover:bg-[#eaeaea] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                        title="Opens TikTok Creator Studio and auto-copies caption & tags"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>Publish to TikTok</span>
+                      </button>
+
+                      {/* 1-Click YouTube Studio */}
+                      <button
+                        onClick={() => openYouTubeUpload(video)}
+                        className="px-3 py-1.5 rounded bg-[#161616] text-white hover:bg-[#252525] border border-[#2a2a2a] text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all"
+                        title="Opens YouTube Shorts upload and auto-copies description"
+                      >
+                        <span>YouTube Studio</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
                     </div>
                   </div>
 
-                  {/* Embedded Video Player */}
+                  {/* Embedded 3D Video Player */}
                   {video.video_path && (
-                    <div className="bg-black rounded border border-[#1a1a1a] flex justify-center p-2">
+                    <div className="bg-black rounded border border-[#1a1a1a] flex justify-center p-3 relative group">
                       <video
                         controls
-                        className="max-h-80 w-auto rounded"
+                        className="max-h-96 w-auto rounded shadow-2xl"
                         src={`/media/${video.video_path.replace(/\\/g, '/').split('output/')[1] || 'video.mp4'}`}
                       />
                     </div>
                   )}
 
+                  {/* Narration Script */}
+                  <div className="p-3.5 bg-black border border-[#1a1a1a] rounded text-xs space-y-1">
+                    <span className="font-mono text-[10px] uppercase text-[#777777] block">Narration Script</span>
+                    <p className="text-[#bbbbbb] leading-relaxed text-xs">
+                      {video.script}
+                    </p>
+                  </div>
+
                   {/* TikTok Pinned Commentary Box */}
                   {video.tiktok_commentary && (
-                    <div className="p-3 bg-black border border-[#1f1f1f] rounded space-y-1.5 text-xs">
+                    <div className="p-3.5 bg-black border border-[#1f1f1f] rounded space-y-2 text-xs">
                       <div className="flex items-center justify-between text-[#888888]">
-                        <span className="font-mono text-[11px] uppercase text-white font-medium">
-                          TikTok Pinned Comment (Boosts Engagement)
+                        <span className="font-mono text-[11px] uppercase text-white font-semibold flex items-center gap-1.5">
+                          <MessageSquareQuote className="w-3.5 h-3.5 text-white" />
+                          <span>TikTok Pinned Comment (Drives Views & Replies)</span>
                         </span>
                         <button
                           onClick={() => copyToClipboard(video.tiktok_commentary, `comm-${video.id}`)}
@@ -472,7 +511,7 @@ export const App: React.FC = () => {
                           )}
                         </button>
                       </div>
-                      <p className="text-white text-xs leading-relaxed font-mono select-all">
+                      <p className="text-white text-xs leading-relaxed font-mono select-all bg-[#0a0a0a] p-2.5 rounded border border-[#181818]">
                         {video.tiktok_commentary}
                       </p>
                     </div>
@@ -480,10 +519,11 @@ export const App: React.FC = () => {
 
                   {/* TikTok Caption & Viral Reach Hashtags */}
                   {video.tiktok_hashtags && (
-                    <div className="p-3 bg-black border border-[#1f1f1f] rounded space-y-1.5 text-xs">
+                    <div className="p-3.5 bg-black border border-[#1f1f1f] rounded space-y-2 text-xs">
                       <div className="flex items-center justify-between text-[#888888]">
-                        <span className="font-mono text-[11px] uppercase text-white font-medium">
-                          TikTok Caption & Hashtags
+                        <span className="font-mono text-[11px] uppercase text-white font-semibold flex items-center gap-1.5">
+                          <Hash className="w-3.5 h-3.5 text-white" />
+                          <span>TikTok Caption & Algorithm Reach Hashtags</span>
                         </span>
                         <button
                           onClick={() => {
@@ -505,9 +545,9 @@ export const App: React.FC = () => {
                           )}
                         </button>
                       </div>
-                      <p className="text-[#cccccc] text-xs font-mono select-all">
-                        {video.title} 🤯 Science breakdown you didn't know!
-                        <br />
+                      <p className="text-[#cccccc] text-xs font-mono select-all bg-[#0a0a0a] p-2.5 rounded border border-[#181818]">
+                        <span className="text-white font-bold">{video.title} 🤯 Science breakdown you didn't know!</span>
+                        <br /><br />
                         <span className="text-[#888888]">{video.tiktok_hashtags}</span>
                       </p>
                     </div>

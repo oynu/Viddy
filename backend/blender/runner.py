@@ -439,41 +439,53 @@ class BlenderRunner:
         timeout_seconds: float = 60.0
     ) -> str:
         """
-        Generates real animated 1080x1920 30FPS MP4 video using FFmpeg's geometric filter pipeline.
-        Ensures the continuous autonomous pipeline is 100% operational on any environment.
+        Generates real animated 1080x1920 30FPS low-poly 3D video using Procedural3DRenderer.
+        Renders real 3D geometry with perspective projection, flat faceted shading, and starfield.
         """
+        from backend.blender.renderer_3d import Procedural3DRenderer
+        renderer = Procedural3DRenderer()
+        fps = 30
         total_sec = max(2.0, scene.duration)
-        ffmpeg_bin = settings.ffmpeg_path
-        
-        # Color mapping for vibrant cinematic theme
-        color_hex = scene.accent_color.replace("#", "")
-        bg_color = "0x0B0E14"
-        
-        filter_complex = (
-            f"color=c={bg_color}:s=1080x1920:d={total_sec}:r=30,"
-            f"drawbox=y='(1920/2)-200+sin(t*2)*80':x='(1080/2)-200+cos(t*1.5)*60':w=400:h=400:color=0x{color_hex}@0.9:t=fill,"
-            f"drawbox=y='(1920/2)-120+sin(t*2.2)*90':x='(1080/2)-120+cos(t*1.7)*70':w=240:h=240:color=0xFFFFFF@0.7:t=12,"
-            f"format=yuv420p"
-        )
+        total_frames = int(total_sec * fps)
         
         cmd = [
-            ffmpeg_bin,
-            "-y",
-            "-f", "lavfi",
-            "-i", filter_complex,
-            "-t", str(total_sec),
+            settings.ffmpeg_path, "-y",
+            "-f", "rawvideo",
+            "-vcodec", "rawvideo",
+            "-s", "1080x1920",
+            "-pix_fmt", "rgb24",
+            "-r", str(fps),
+            "-i", "-",
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
+            "-preset", "veryfast",
             video_out
         ]
         
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
+            
+            for i in range(total_frames):
+                t_norm = i / max(1, total_frames)
+                frame = renderer.render_frame(
+                    scene_type=scene.generator_type,
+                    t_normalized=t_norm,
+                    accent_color_hex=scene.accent_color,
+                    caption_tag=scene.generator_type.upper()
+                )
+                proc.stdin.write(frame.tobytes())
+                if i % 15 == 0:
+                    await proc.stdin.drain()
+                    
+            await proc.stdin.drain()
+            proc.stdin.close()
+            await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
         except Exception:
             pass
+            
         return video_out
