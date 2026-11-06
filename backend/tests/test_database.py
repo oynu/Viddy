@@ -13,19 +13,23 @@ def test_database_initialization_and_crud(tmp_path):
         assert settings.running_mode == "continuous"
         assert settings.publish_destination in ["local", "both", "youtube", "tiktok"]
         
-        # Test creating and fetching video
+        # Test creating and fetching video with TikTok growth metadata
         video = crud.create_video(
             session,
             title="What if the Moon vanished?",
             topic="Astrophysics",
             script="Imagine looking up at the night sky...",
             duration=35.0,
-            status="completed"
+            status="completed",
+            tiktok_commentary="💬 PINNED QUESTION: What would you do first? 👇",
+            tiktok_hashtags="#fyp #foryou #learnontiktok #space #astronomy"
         )
         assert video.id is not None
         fetched = crud.get_video_by_id(session, video.id)
         assert fetched.title == "What if the Moon vanished?"
         assert fetched.duration == 35.0
+        assert fetched.tiktok_commentary == "💬 PINNED QUESTION: What would you do first? 👇"
+        assert "#fyp" in fetched.tiktok_hashtags
         
         # Test updating video
         updated = crud.update_video(session, video.id, youtube_url="https://youtube.com/shorts/xyz123")

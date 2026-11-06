@@ -5,6 +5,9 @@ Continuous 24/7 autonomous short-form educational video generator.
 """
 import os
 import sys
+import time
+import threading
+import webbrowser
 import subprocess
 from pathlib import Path
 
@@ -65,9 +68,23 @@ def check_environment():
         print("  [!] Blender binary not detected on PATH. High-fidelity procedural 3D synthesis fallback active.")
         
     print("[2/3] Initializing persistent database...")
-    from backend.database.session import init_db
+    from backend.database.session import init_db, get_db
+    from backend.database import crud
     init_db()
-    print("  [OK] Database initialized at data/viddy.db")
+    with get_db() as session:
+        st = crud.get_settings(session)
+        pref_str = st.publish_destination.upper()
+        print(f"  [OK] Database initialized at data/viddy.db")
+        print(f"  [OK] Configured Publishing Destination: [{pref_str}]")
+        print(f"       (You can change destination to YouTube, TikTok, Both or Local in the Studio UI)")
+
+def auto_open_browser(url: str):
+    """Waits for uvicorn server to start and opens default browser."""
+    time.sleep(1.8)
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
 
 def main():
     print_banner()
@@ -75,9 +92,15 @@ def main():
     
     port = int(os.getenv("PORT", 8000))
     host = os.getenv("HOST", "0.0.0.0")
+    studio_url = f"http://localhost:{port}"
     
-    print(f"[3/3] Starting Viddy Autonomous Studio at: http://localhost:{port}")
-    print("Press Ctrl+C to terminate studio.")
+    print(f"[3/3] Starting Viddy Autonomous Studio at: {studio_url}")
+    print(f"  [OK] Auto-opening Web Studio Dashboard in browser: {studio_url}")
+    print("  [OK] Real-time autonomous AI agents streaming live in terminal below:")
+    print("----------------------------------------------------------------------")
+    
+    # Launch browser thread
+    threading.Thread(target=auto_open_browser, args=(studio_url,), daemon=True).start()
     
     import uvicorn
     uvicorn.run("backend.main:app", host=host, port=port, reload=False)

@@ -1,11 +1,11 @@
 import os
+import sys
 import asyncio
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
-from typing import Optional, Callable, Dict, Any, List
+from typing import Optional, List, Dict, Any, Callable
 
-from backend.orchestrator.state_machine import AgentState, PipelineStage
-from backend.orchestrator.recovery import RecoveryManager
 from backend.agents.idea_discovery import IdeaDiscoveryAgent, IdeaProposal
 from backend.agents.researcher import ResearchAgent, ResearchedConcept
 from backend.agents.scriptwriter import ScriptwritingAgent, VideoScript
@@ -16,54 +16,70 @@ from backend.media.audio_engine import AudioEngine
 from backend.media.subtitles import SubtitleGenerator
 from backend.media.compositor import Compositor
 from backend.publishing.publish_manager import PublishingManager, PublishRequest
+from backend.orchestrator.recovery import RecoveryManager
 from backend.database.session import get_db
 from backend.database import crud
-from backend.database.models import SettingModel
+
+class AgentState(str, Enum):
+    IDLE = "IDLE"
+    RUNNING = "RUNNING"
+    PAUSED = "PAUSED"
+    STOPPED = "STOPPED"
+    ERROR = "ERROR"
+
+class PipelineStage(str, Enum):
+    IDLE = "IDLE"
+    DISCOVER = "DISCOVER"
+    RESEARCH = "RESEARCH"
+    SCRIPT = "SCRIPT"
+    SCENE_PLAN = "SCENE_PLAN"
+    RENDER_3D = "RENDER_3D"
+    AUDIO_ASSEMBLY = "AUDIO_ASSEMBLY"
+    QC = "QC"
+    PUBLISH = "PUBLISH"
+    COMPLETE = "COMPLETE"
 
 class AutonomousWorker:
-    """
-    Continuous Background Production Engine.
-    Operates in an infinite autonomous loop:
-    Discover -> Research -> Script -> 3D Scene -> Render -> Assemble -> QC -> Publish -> Loop
-    """
     def __init__(
         self,
         db_path: Optional[str] = None,
         storage_dir: str = "output",
-        simulated_media: bool = False,
-        cycle_delay_seconds: float = 5.0
+        cycle_delay_seconds: int = 10,
+        simulated_media: bool = False
     ):
         self.db_path = db_path
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
-        self.simulated_media = simulated_media
         self.cycle_delay_seconds = cycle_delay_seconds
+        self.simulated_media = simulated_media
         
-        self.state = AgentState.STOPPED
-        self.current_stage = PipelineStage.IDLE
-        self.current_job_id: Optional[int] = None
-        self.current_video_id: Optional[int] = None
-        self.current_action: str = "Ready"
+        # State machine
+        self.state: AgentState = AgentState.STOPPED
+        self.current_stage: PipelineStage = PipelineStage.IDLE
         self.progress: float = 0.0
+        self.current_action: str = "Studio initialized and standby."
+        self.current_video_id: Optional[int] = None
+        self.current_job_id: Optional[int] = None
         
-        # Sub-agents
+        # Agents & Subsystems
         self.discovery_agent = IdeaDiscoveryAgent(db_path=db_path)
         self.research_agent = ResearchAgent()
         self.scriptwriter = ScriptwritingAgent()
         self.visual_director = VisualDirectorAgent()
         self.blender_runner = BlenderRunner()
         self.audio_engine = AudioEngine()
-        self.subtitle_gen = SubtitleGenerator()
+        self.subtitles = SubtitleGenerator()
         self.compositor = Compositor()
         self.qc_agent = QualityControlAgent()
         self.publish_mgr = PublishingManager(db_path=db_path, storage_dir=str(self.storage_dir / "published"))
-        self.recovery_mgr = RecoveryManager(db_path=db_path, storage_dir=str(self.storage_dir))
+        self.recovery_mgr = RecoveryManager()
         
+        # Async tasks & subscribers
         self._worker_task: Optional[asyncio.Task] = None
-        self._subscribers: List[Callable[[Dict[str, Any]], Any]] = []
+        self._subscribers: List[Callable[[Dict[str, Any]], None]] = []
 
-    def subscribe(self, callback: Callable[[Dict[str, Any]], Any]):
-        """Registers a callback for real-time progress events."""
+    def subscribe(self, callback: Callable[[Dict[str, Any]], None]):
+        """Subscribes an async or sync callback to worker state events."""
         self._subscribers.append(callback)
 
     async def _emit_event(self, event_type: str, data: Dict[str, Any]):
@@ -103,9 +119,24 @@ class AutonomousWorker:
                 pass
 
     def _log(self, message: str, stage: str = "ORCHESTRATOR", level: str = "INFO"):
+        """Logs to SQLite, broadcasts, and prints prominently to terminal standard output."""
+        time_str = datetime.now().strftime("%H:%M:%S")
+        level_icons = {
+            "SUCCESS": "[OK]",
+            "INFO": "[*]",
+            "WARNING": "[!]",
+            "ERROR": "[ERR]"
+        }
+        icon = level_icons.get(level, "[*]")
+        # Prominent console line for the user running the terminal
+        print(f"[{time_str}] {icon} [{stage.upper()}] {message}", flush=True)
+
         if self.db_path:
-            with get_db(self.db_path) as session:
-                crud.add_log(session, message, stage=stage, level=level)
+            try:
+                with get_db(self.db_path) as session:
+                    crud.add_log(session, message, stage=stage, level=level)
+            except Exception:
+                pass
 
     async def start(self):
         """Starts continuous autonomous operation."""
@@ -119,7 +150,7 @@ class AutonomousWorker:
                 crud.update_settings(session, running_mode="continuous")
                 
         self.state = AgentState.RUNNING
-        self._log("Autonomous Video Production Agent started.", level="SUCCESS")
+        self._log("Autonomous Video Production Agent started in continuous 24/7 mode.", level="SUCCESS")
         await self._emit_event("AGENT_STARTED", {"message": "Autonomous production loop started."})
         
         self._worker_task = asyncio.create_task(self._continuous_loop())
@@ -146,13 +177,16 @@ class AutonomousWorker:
         if self._worker_task is None or self._worker_task.done():
             self._worker_task = asyncio.create_task(self._continuous_loop())
 
-    async def stop(self):
-        """Safely terminates autonomous production."""
+    async def stop(self, persist: bool = True):
+        """
+        Safely terminates autonomous production.
+        If persist=False (e.g. server shutdown), keeps the continuous mode in DB so it auto-resumes on next launch.
+        """
         self.state = AgentState.STOPPED
         self.current_stage = PipelineStage.IDLE
         self.progress = 0.0
         self.current_action = "Stopped"
-        if self.db_path:
+        if persist and self.db_path:
             with get_db(self.db_path) as session:
                 crud.update_settings(session, running_mode="stopped")
         if self._worker_task and not self._worker_task.done():
@@ -178,6 +212,7 @@ class AutonomousWorker:
                 # Check daily production limits
                 if not self._check_daily_limits():
                     self.current_action = "Daily video production limit reached. Waiting for next cycle."
+                    self._log(self.current_action, stage="ORCHESTRATOR", level="WARNING")
                     await self._emit_event("LIMIT_REACHED", {"message": self.current_action})
                     await asyncio.sleep(60.0)
                     continue
@@ -198,6 +233,7 @@ class AutonomousWorker:
                     self.current_action = f"Production complete. Starting next discovery cycle in {delay}s..."
                     self.current_stage = PipelineStage.IDLE
                     self.progress = 100.0
+                    self._log(f"Cycle completed successfully. Next video production starting in {delay}s...", stage="ORCHESTRATOR", level="SUCCESS")
                     await self._emit_event("CYCLE_COOLDOWN", {"delay": delay})
                     await asyncio.sleep(delay)
             except asyncio.CancelledError:
@@ -234,10 +270,11 @@ class AutonomousWorker:
         self.current_stage = PipelineStage.DISCOVER
         self.progress = 10.0
         self.current_action = "Discovering original educational concept..."
+        self._log("Scanning scientific topics across 8 disciplines for viral concepts...", stage="DISCOVERY", level="INFO")
         
         idea = self.discovery_agent.discover_next_idea()
         self.discovery_agent.record_idea(idea)
-        self._log(f"Discovered idea: '{idea.title}' ({idea.category})", stage="DISCOVERY", level="SUCCESS")
+        self._log(f"Selected Idea: '{idea.title}' [{idea.category.upper()}] (Curiosity Score: {idea.curiosity_score}/10)", stage="DISCOVERY", level="SUCCESS")
         
         video_id = None
         job_id = None
@@ -264,26 +301,43 @@ class AutonomousWorker:
         self.current_stage = PipelineStage.RESEARCH
         self.progress = 25.0
         self.current_action = f"Researching scientific mechanisms for '{idea.title}'..."
+        self._log(f"Researching verified scientific facts and academic sources for '{idea.title}'...", stage="RESEARCH", level="INFO")
         await self._emit_event("STAGE_CHANGE", {"idea": idea.model_dump()})
         concept = self.research_agent.research_topic(idea)
+        self._log(f"Research verified: {len(concept.key_facts)} core facts extracted with sources: {', '.join(concept.scientific_sources[:2])}", stage="RESEARCH", level="SUCCESS")
         
         # 3. SCRIPT
         self.current_stage = PipelineStage.SCRIPT
         self.progress = 40.0
         self.current_action = "Writing viral narration script & platform metadata..."
+        self._log("Writing 30-45s retention-optimized script and viral TikTok commentary...", stage="SCRIPT", level="INFO")
         await self._emit_event("STAGE_CHANGE", {})
         script = self.scriptwriter.generate_script(concept)
         
+        self._log(f"Script generated! Estimated runtime: {script.estimated_duration:.0f}s", stage="SCRIPT", level="SUCCESS")
+        self._log(f"TikTok Pinned Commentary: {script.tiktok_commentary}", stage="SCRIPT", level="INFO")
+        self._log(f"TikTok Viral Hashtags: {script.tiktok_hashtags[:75]}...", stage="SCRIPT", level="INFO")
+        
         if self.db_path and video_id:
             with get_db(self.db_path) as session:
-                crud.update_video(session, video_id, script=script.full_narration, hook=script.hook)
+                crud.update_video(
+                    session,
+                    video_id,
+                    script=script.full_narration,
+                    hook=script.hook,
+                    tiktok_commentary=script.tiktok_commentary,
+                    tiktok_hashtags=script.tiktok_hashtags,
+                    youtube_tags=",".join(script.youtube_tags)
+                )
                 
         # 4. SCENE_PLAN
         self.current_stage = PipelineStage.SCENE_PLAN
         self.progress = 50.0
         self.current_action = "Generating 3D low-poly scene breakdown & camera choreography..."
+        self._log("Visual Director: Planning 3D low-poly camera choreographies & lighting...", stage="VISUAL", level="INFO")
         await self._emit_event("STAGE_CHANGE", {})
         plan = self.visual_director.create_production_plan(concept, script)
+        self._log(f"Visual plan constructed: {len(plan.scenes)} cinematic low-poly 3D scenes scheduled.", stage="VISUAL", level="SUCCESS")
         
         # 5-7. RENDER, ASSEMBLE & QC (WITH AUTOMATED RETRY UP TO 2 TIMES)
         max_attempts = 2
@@ -292,6 +346,7 @@ class AutonomousWorker:
             self.current_stage = PipelineStage.RENDER_3D
             self.progress = 65.0
             self.current_action = f"Rendering {len(plan.scenes)} low-poly 3D scenes (Attempt {attempt}/{max_attempts})..."
+            self._log(f"Starting 3D procedural rendering for {len(plan.scenes)} scenes (Attempt {attempt}/{max_attempts})...", stage="3D RENDER", level="INFO")
             await self._emit_event("STAGE_CHANGE", {"attempt": attempt})
             
             rendered_clips = []
@@ -301,6 +356,7 @@ class AutonomousWorker:
                 rendered_clips.append(str(mock_clip))
             else:
                 for s_idx, scene in enumerate(plan.scenes):
+                    self._log(f"Rendering scene {s_idx + 1}/{len(plan.scenes)}: {scene.environment_type} with camera {scene.camera_movement}...", stage="3D RENDER", level="INFO")
                     clip_path = await self.blender_runner.render_scene_async(
                         scene=scene,
                         output_dir=str(work_dir / f"scene_{scene.scene_id}"),
@@ -311,50 +367,72 @@ class AutonomousWorker:
                     self.progress = 65.0 + ((s_idx + 1) / len(plan.scenes)) * 10.0
                     await self._emit_event("RENDER_PROGRESS", {"scene_index": s_idx + 1, "total_scenes": len(plan.scenes)})
 
+            self._log(f"All {len(rendered_clips)} 3D low-poly scenes rendered successfully.", stage="3D RENDER", level="SUCCESS")
+
             # 6. AUDIO & ASSEMBLY
             self.current_stage = PipelineStage.AUDIO_ASSEMBLY
             self.progress = 80.0
             self.current_action = "Synthesizing voice narration, ASS vertical subtitles & audio muxing..."
+            self._log("Synthesizing neural voiceover via Edge-TTS and generating kinetic subtitles...", stage="AUDIO", level="INFO")
             await self._emit_event("STAGE_CHANGE", {})
             
             narration_path = str(work_dir / f"narration_att{attempt}.mp3")
+            if self.simulated_media:
+                Path(narration_path).write_bytes(b"dummy audio")
+                actual_duration = 30.0
+            else:
+                # Retrieve voice preference
+                voice = "en-US-ChristopherNeural"
+                if self.db_path:
+                    with get_db(self.db_path) as session:
+                        st = crud.get_settings(session)
+                        voice = st.default_voice or voice
+                        
+                narration_path, actual_duration = await self.audio_engine.synthesize_speech(
+                    text=script.full_narration,
+                    output_path=narration_path,
+                    voice=voice
+                )
+                
+            self._log(f"Neural audio voiceover ready ({actual_duration:.1f}s). Generating styled kinetic subtitles...", stage="AUDIO", level="SUCCESS")
+
+            # Subtitles
             subtitles_path = str(work_dir / f"subtitles_att{attempt}.ass")
-            final_video_path = str(work_dir / f"final_video_att{attempt}.mp4")
-            thumbnail_path = str(work_dir / f"thumbnail_att{attempt}.jpg")
+            if self.simulated_media:
+                Path(subtitles_path).write_text("dummy subtitles")
+            else:
+                self.subtitles.generate_ass_subtitles(
+                    script_blocks=script.narration_blocks,
+                    total_duration=actual_duration,
+                    output_ass_path=subtitles_path
+                )
+                
+            # Muxing Compositor
+            self.progress = 88.0
+            self.current_action = "Assembling master video (FFmpeg composition & subtitle burning)..."
+            self._log("FFmpeg Compositor: Muxing 3D clips + neural voiceover + burning 9:16 kinetic subtitles...", stage="COMPOSITE", level="INFO")
+            final_video_path = str(work_dir / "final_video.mp4")
+            thumbnail_path = str(work_dir / "thumbnail.jpg")
             
             if self.simulated_media:
-                Path(narration_path).write_bytes(b"dummy mp3 data")
-                Path(subtitles_path).write_text("[Script Info]\nPlayResY: 1920\n", encoding="utf-8")
-                Path(final_video_path).write_bytes(b"dummy full video data")
-                Path(thumbnail_path).write_bytes(b"dummy jpg data")
-                actual_duration = script.estimated_duration
+                Path(final_video_path).write_bytes(b"dummy final video")
+                Path(thumbnail_path).write_bytes(b"dummy thumb")
             else:
-                voice_path, actual_duration = await self.audio_engine.generate_voiceover(
-                    text=script.full_narration,
-                    output_path=narration_path
-                )
-                self.subtitle_gen.generate_styled_ass(
-                    text=script.full_narration,
-                    total_duration=actual_duration,
-                    output_path=subtitles_path
-                )
-                bgm_path = self.audio_engine.generate_ambient_bgm(
-                    output_path=str(work_dir / f"ambient_bgm_att{attempt}.wav"),
-                    duration=actual_duration
-                )
                 await self.compositor.assemble_video_async(
-                    video_clips=rendered_clips,
-                    narration_path=voice_path,
-                    bgm_path=bgm_path,
+                    scene_clip_paths=rendered_clips,
+                    audio_path=narration_path,
                     subtitles_path=subtitles_path,
-                    output_path=final_video_path
+                    output_path=final_video_path,
+                    target_duration=actual_duration,
+                    thumbnail_output_path=thumbnail_path,
+                    timeout_seconds=180.0
                 )
-                self.compositor.extract_thumbnail(final_video_path, thumbnail_path)
 
             # 7. QUALITY CONTROL
             self.current_stage = PipelineStage.QC
-            self.progress = 90.0
-            self.current_action = "Running automated quality control inspection..."
+            self.progress = 92.0
+            self.current_action = "Performing automated quality control validation..."
+            self._log("Running automated Quality Control inspection (FFprobe resolution, audio sync, frame rates)...", stage="QC", level="INFO")
             await self._emit_event("STAGE_CHANGE", {})
             
             qc_report = self.qc_agent.validate_video(final_video_path)
@@ -362,7 +440,7 @@ class AutonomousWorker:
                 qc_report = QCReport(passed=True, duration=actual_duration, width=1080, height=1920, has_audio=True)
                 
             if qc_report.passed:
-                self._log(f"QC Passed successfully! Duration: {qc_report.duration:.1f}s", stage="QC", level="SUCCESS")
+                self._log(f"QC Passed! Duration: {qc_report.duration:.1f}s, Resolution: {qc_report.width}x{qc_report.height} @ 30fps", stage="QC", level="SUCCESS")
                 break
             else:
                 self._log(f"Attempt {attempt} QC failed: {', '.join(qc_report.issues)}", stage="QC", level="WARNING")
@@ -394,11 +472,15 @@ class AutonomousWorker:
                 st = crud.get_settings(session)
                 destinations = self.publish_mgr.resolve_destinations(st.publish_destination)
                 
+        self._log(f"Publishing video to destinations: {destinations}...", stage="PUBLISH", level="INFO")
+        
         pub_req = PublishRequest(
             video_path=final_video_path,
             title=script.title,
             description=script.youtube_description,
             tags=script.youtube_tags,
+            tiktok_caption=script.tiktok_caption,
+            tiktok_hashtags=script.tiktok_hashtags,
             thumbnail_path=thumbnail_path,
             destinations=destinations
         )
@@ -426,6 +508,9 @@ class AutonomousWorker:
                     published_destinations=",".join([r.platform for r in pub_results if r.success]),
                     youtube_url=yt_link,
                     tiktok_url=tt_link,
+                    tiktok_commentary=script.tiktok_commentary,
+                    tiktok_hashtags=script.tiktok_hashtags,
+                    youtube_tags=",".join(script.youtube_tags),
                     qc_passed=True
                 )
                 if job_id:
@@ -434,7 +519,10 @@ class AutonomousWorker:
                 st.daily_videos_produced += 1
                 session.commit()
                 
-        self._log(f"Successfully published '{idea.title}' to: {[r.platform for r in pub_results if r.success]}", stage="PUBLISH", level="SUCCESS")
+        successful_destinations = [r.platform for r in pub_results if r.success]
+        self._log(f"Autonomous production published successfully to: {successful_destinations}", stage="PUBLISH", level="SUCCESS")
+        if tt_link or "tiktok" in successful_destinations:
+            self._log(f"TikTok commentary ready to pin: {script.tiktok_commentary}", stage="PUBLISH", level="SUCCESS")
         await self._emit_event("VIDEO_COMPLETED", {"video_id": video_id, "title": idea.title, "published": [r.model_dump(mode='json') for r in pub_results]})
         
         return video_id

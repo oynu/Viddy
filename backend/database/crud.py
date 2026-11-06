@@ -37,7 +37,10 @@ def create_video(
     duration: float = 0.0,
     category: str = "science",
     hook: Optional[str] = None,
-    status: str = "pending"
+    status: str = "pending",
+    tiktok_commentary: Optional[str] = None,
+    tiktok_hashtags: Optional[str] = None,
+    youtube_tags: Optional[str] = None
 ) -> VideoModel:
     video = VideoModel(
         title=title,
@@ -47,6 +50,9 @@ def create_video(
         hook=hook,
         duration=duration,
         status=status,
+        tiktok_commentary=tiktok_commentary,
+        tiktok_hashtags=tiktok_hashtags,
+        youtube_tags=youtube_tags,
         created_at=utcnow()
     )
     session.add(video)

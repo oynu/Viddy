@@ -11,6 +11,8 @@ class VideoScript(BaseModel):
     estimated_duration: float = 35.0
     on_screen_texts: List[str] = Field(default_factory=list)
     tiktok_caption: str = ""
+    tiktok_hashtags: str = ""
+    tiktok_commentary: str = ""
     youtube_title: str = ""
     youtube_description: str = ""
     youtube_tags: List[str] = Field(default_factory=list)
@@ -18,6 +20,67 @@ class VideoScript(BaseModel):
 class ScriptwritingAgent:
     def __init__(self, target_wpm: int = 140):
         self.target_wpm = target_wpm
+
+    def _generate_tiktok_hashtags(self, category: str, title: str) -> str:
+        """
+        Generates algorithm-optimized TikTok hashtag block combining:
+        1. Universal high-traffic FYP tags
+        2. STEM / Education authority tags
+        3. Topic-specific category tags
+        """
+        # FYP + STEM authority staples
+        core_tags = ["#fyp", "#foryou", "#foryoupage", "#viral", "#trending", "#learnontiktok", "#stemtok", "#sciencetok", "#factsdaily", "#whatif"]
+        
+        category_tags_map = {
+            "space": ["#space", "#universe", "#astronomy", "#nasa", "#blackhole", "#cosmos", "#galaxy", "#astrophysics"],
+            "physics": ["#physics", "#quantum", "#quantumphysics", "#relativity", "#sciencefacts", "#einstein"],
+            "biology": ["#biology", "#neuroscience", "#brain", "#dna", "#cells", "#humanbody", "#science"],
+            "chemistry": ["#chemistry", "#atoms", "#molecules", "#elements", "#reactions", "#sciencetok"],
+            "technology": ["#tech", "#technology", "#ai", "#artificialintelligence", "#futuretech", "#engineering"],
+            "psychology": ["#psychology", "#brainfacts", "#humanbehavior", "#mindblowing", "#psychologyfacts"],
+            "math": ["#math", "#mathematics", "#geometry", "#logic", "#mindblowing", "#education"],
+            "everyday": ["#everydayphysics", "#sciencefacts", "#didyouknow", "#mindblown", "#curiosity"]
+        }
+        
+        cat_lower = (category or "science").lower()
+        selected_cat_tags = []
+        for key, tags in category_tags_map.items():
+            if key in cat_lower or key in title.lower():
+                selected_cat_tags.extend(tags)
+                
+        if not selected_cat_tags:
+            selected_cat_tags = ["#science", "#physics", "#mindblown", "#curiosity", "#education"]
+
+        # Deduplicate while preserving order
+        all_tags = []
+        for tag in core_tags + selected_cat_tags:
+            if tag not in all_tags:
+                all_tags.append(tag)
+                
+        return " ".join(all_tags[:16])
+
+    def _generate_tiktok_commentary(self, concept: ResearchedConcept) -> str:
+        """
+        Generates a viral first pinned comment designed to trigger debate,
+        theories, and comments to maximize TikTok engagement signals.
+        """
+        clean_title = concept.title.replace('What if ', '').replace('How does ', '').rstrip('?')
+        
+        if "what if" in concept.title.lower():
+            return (
+                f"💬 PINNED QUESTION: Be honest—if {clean_title.lower()} happened tomorrow, "
+                f"what would be your very first move? Drop your wildest theory below! 👇"
+            )
+        elif "why" in concept.title.lower() or "how" in concept.title.lower():
+            return (
+                f"💬 PINNED QUESTION: Did you know this before watching, or did this surprise you? "
+                f"What mind-bending question should Viddy explain next? Drop it below! 👇"
+            )
+        else:
+            return (
+                f"💬 PINNED QUESTION: What is the most mind-bending fact about {clean_title} you've ever heard? "
+                f"Share your thoughts below! 👇"
+            )
 
     def generate_script(self, concept: ResearchedConcept) -> VideoScript:
         """
@@ -59,9 +122,16 @@ class ScriptwritingAgent:
             "WHAT HAPPENS NEXT?"
         ]
         
-        # Platform-specific publishing metadata
-        tags = ["#shorts", "#science", "#education", "#physics", "#whatif", "#viddy", "#learn"]
-        tiktok_caption = f"{concept.title} 🤯 Science breakdown you didn't know! {' '.join(tags[:5])}"
+        # Algorithm-optimized hashtags and viral commentary
+        cat = getattr(concept, "category", "science")
+        tiktok_hashtags = self._generate_tiktok_hashtags(cat, concept.title)
+        tiktok_commentary = self._generate_tiktok_commentary(concept)
+        
+        # Optimized TikTok caption with viral hook + tags
+        tiktok_caption = f"{concept.title} 🤯 Science breakdown you didn't know!\n\n{tiktok_hashtags}"
+        
+        # YouTube Shorts metadata
+        youtube_tags = ["#shorts", "#science", "#education", "#physics", "#whatif", "#viddy", "#learn"]
         youtube_title = f"{concept.title} #shorts"
         
         sources_str = ", ".join(concept.scientific_sources) if concept.scientific_sources else "Verified Academic Sources"
@@ -70,7 +140,7 @@ class ScriptwritingAgent:
             f"{full_text}\n\n"
             f"Sources: {sources_str}\n"
             f"Produced autonomously by Viddy AI Video Studio.\n\n"
-            f"{' '.join(tags)}"
+            f"{tiktok_hashtags}"
         )
         
         return VideoScript(
@@ -82,7 +152,9 @@ class ScriptwritingAgent:
             estimated_duration=max(25.0, min(58.0, estimated_duration)),
             on_screen_texts=on_screen_texts,
             tiktok_caption=tiktok_caption,
+            tiktok_hashtags=tiktok_hashtags,
+            tiktok_commentary=tiktok_commentary,
             youtube_title=youtube_title,
             youtube_description=youtube_description,
-            youtube_tags=tags
+            youtube_tags=youtube_tags
         )

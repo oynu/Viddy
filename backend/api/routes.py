@@ -175,6 +175,9 @@ def list_videos(limit: int = 50):
                 "published_destinations": v.published_destinations,
                 "youtube_url": v.youtube_url,
                 "tiktok_url": v.tiktok_url,
+                "tiktok_commentary": v.tiktok_commentary,
+                "tiktok_hashtags": v.tiktok_hashtags,
+                "youtube_tags": v.youtube_tags,
                 "qc_passed": v.qc_passed,
                 "created_at": v.created_at.isoformat() if v.created_at else None
             }
@@ -202,6 +205,9 @@ def get_video_detail(video_id: int):
             "published_destinations": v.published_destinations,
             "youtube_url": v.youtube_url,
             "tiktok_url": v.tiktok_url,
+            "tiktok_commentary": v.tiktok_commentary,
+            "tiktok_hashtags": v.tiktok_hashtags,
+            "youtube_tags": v.youtube_tags,
             "qc_passed": v.qc_passed,
             "qc_details": v.qc_details,
             "error_message": v.error_message,
@@ -238,18 +244,32 @@ def connect_channel(req: PlatformConnectRequest):
             platform=req.platform,
             is_connected=True,
             access_token=req.access_token or "mock_access_token_demo",
-            refresh_token=req.refresh_token,
-            account_name=req.account_name or f"{req.platform.title()} Channel"
+            refresh_token=req.refresh_token or "mock_refresh_token_demo",
+            account_name=req.account_name or f"Authorized {req.platform.capitalize()} Creator"
         )
         return {
+            "message": f"Successfully connected {req.platform}",
             "platform": acc.platform,
             "connected": acc.is_connected,
             "account_name": acc.account_name
         }
 
-# Production Logs
+@router.post("/channels/disconnect")
+def disconnect_channel(platform: str):
+    with get_db() as session:
+        acc = crud.upsert_platform_account(
+            session=session,
+            platform=platform,
+            is_connected=False,
+            access_token=None,
+            refresh_token=None,
+            account_name=None
+        )
+        return {"message": f"Disconnected {platform}", "connected": False}
+
+# Real-time System Logs
 @router.get("/logs")
-def list_logs(limit: int = 50):
+def get_logs(limit: int = 100):
     with get_db() as session:
         logs = crud.get_recent_logs(session, limit=limit)
         return [

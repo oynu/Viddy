@@ -45,6 +45,10 @@ class VideoModel(Base):
     youtube_url = Column(String(500), nullable=True)
     tiktok_url = Column(String(500), nullable=True)
     
+    tiktok_commentary = Column(Text, nullable=True)
+    tiktok_hashtags = Column(Text, nullable=True)
+    youtube_tags = Column(Text, nullable=True)
+    
     qc_passed = Column(Boolean, default=False)
     qc_details = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)

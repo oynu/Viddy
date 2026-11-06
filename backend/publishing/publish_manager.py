@@ -13,6 +13,8 @@ class PublishRequest(BaseModel):
     title: str
     description: str
     tags: List[str] = Field(default_factory=list)
+    tiktok_caption: Optional[str] = None
+    tiktok_hashtags: Optional[str] = None
     thumbnail_path: Optional[str] = None
     destinations: List[str] = Field(default_factory=lambda: ["local"])
 
@@ -126,9 +128,10 @@ class PublishingManager:
                 ))
             elif platform == "tiktok":
                 token = await self.get_valid_token("tiktok")
+                caption = req.tiktok_caption or f"{req.title} {' '.join(req.tags[:4])}"
                 res = await self.tiktok_pub.publish_video(
                     video_path=req.video_path,
-                    caption=f"{req.title} {' '.join(req.tags[:4])}",
+                    caption=caption,
                     access_token=token
                 )
                 results.append(PublishResult(

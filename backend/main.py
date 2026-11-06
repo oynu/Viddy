@@ -36,12 +36,12 @@ async def lifespan(app: FastAPI):
         # Unconditionally recover any abandoned jobs or orphaned states
         worker.recovery_mgr.recover_interrupted_jobs(session)
         st = crud.get_settings(session)
-        if st.running_mode == "continuous":
-            # Auto-start worker in background on server boot
+        # By default in continuous autonomous mode: auto-start unless specifically paused
+        if st.running_mode != "paused":
             asyncio.create_task(worker.start())
     yield
-    # Shutdown
-    await worker.stop()
+    # Shutdown: cleanly stop in-memory tasks without resetting continuous mode in DB
+    await worker.stop(persist=False)
 
 app = FastAPI(
     title="Viddy Autonomous AI Video Studio",

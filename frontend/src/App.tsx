@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Film, Settings as SettingsIcon, Radio, Sparkles, RefreshCw, Cpu } from 'lucide-react';
 
 import { AgentStatusCard } from './components/AgentStatusCard';
+import { PublishingSetupCard } from './components/PublishingSetupCard';
 import { ProductionPipelineVisualizer } from './components/ProductionPipelineVisualizer';
 import { CurrentProductionView } from './components/CurrentProductionView';
 import { VideoLibrary } from './components/VideoLibrary';
@@ -43,6 +44,7 @@ export const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [loading, setLoading] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
+  const accountsRef = useRef<HTMLDivElement>(null);
 
   // Fetch status via REST
   const fetchStatus = async () => {
@@ -200,6 +202,14 @@ export const App: React.FC = () => {
     await fetchStatus();
   };
 
+  const handleSelectDestination = async (destination: string) => {
+    await handleSaveSettings({ publish_destination: destination });
+  };
+
+  const handleOpenAccountSetup = (platform: string) => {
+    accountsRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const handleConnectChannel = async (platform: string, accountName: string) => {
     await fetch('/api/channels/connect', {
       method: 'POST',
@@ -207,6 +217,7 @@ export const App: React.FC = () => {
       body: JSON.stringify({ platform, account_name: accountName })
     });
     await fetchChannels();
+    await fetchStatus();
   };
 
   return (
@@ -250,7 +261,15 @@ export const App: React.FC = () => {
 
       {/* Main Studio Dashboard */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Top: Agent Status & Controls */}
+        {/* Top: Publishing Preferences & Channel Wizard */}
+        <PublishingSetupCard
+          currentDestination={agentStatus.settings?.publish_destination || 'local'}
+          channels={channels}
+          onSelectDestination={handleSelectDestination}
+          onOpenAccountSetup={handleOpenAccountSetup}
+        />
+
+        {/* Agent Status & Lifecycle Controls */}
         <AgentStatusCard
           state={agentStatus.state}
           stats={agentStatus.stats}
@@ -277,7 +296,7 @@ export const App: React.FC = () => {
               progress={agentStatus.progress}
             />
           </div>
-          <div>
+          <div ref={accountsRef}>
             <PlatformAccounts
               channels={channels}
               onConnect={handleConnectChannel}

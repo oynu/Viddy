@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Film, Play, ExternalLink, Download, CheckCircle2, Clock, Share2, Youtube } from 'lucide-react';
+import { Film, Play, ExternalLink, Download, CheckCircle2, Clock, Share2, Youtube, Copy, Check, MessageSquareQuote, Hash } from 'lucide-react';
 
 interface VideoItem {
   id: number;
@@ -15,6 +15,9 @@ interface VideoItem {
   published_destinations: string;
   youtube_url?: string;
   tiktok_url?: string;
+  tiktok_commentary?: string;
+  tiktok_hashtags?: string;
+  youtube_tags?: string;
   qc_passed: boolean;
   created_at?: string;
 }
@@ -26,6 +29,13 @@ interface VideoLibraryProps {
 
 export const VideoLibrary: React.FC<VideoLibraryProps> = ({ videos, onRefresh }) => {
   const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   return (
     <div className="glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl">
@@ -36,7 +46,7 @@ export const VideoLibrary: React.FC<VideoLibraryProps> = ({ videos, onRefresh })
             <span>Autonomous Video Library</span>
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Archive of all programmatically produced educational 3D short-form videos
+            Archive of all programmatically produced educational 3D short-form videos with TikTok viral growth kits
           </p>
         </div>
         <button
@@ -52,7 +62,7 @@ export const VideoLibrary: React.FC<VideoLibraryProps> = ({ videos, onRefresh })
           <Film className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p className="text-base font-semibold text-slate-400">Library is currently empty</p>
           <p className="text-xs text-slate-500 mt-1">
-            As Viddy discovers, renders and publishes videos, they will appear here automatically.
+            As Viddy discovers, renders and publishes videos, they will appear here automatically with full metadata.
           </p>
         </div>
       ) : (
@@ -94,15 +104,42 @@ export const VideoLibrary: React.FC<VideoLibraryProps> = ({ videos, onRefresh })
               </div>
 
               {/* Details & Platform Links */}
-              <div className="p-4">
-                <h4 className="text-sm font-bold text-slate-100 line-clamp-2 leading-snug">
-                  {video.title}
-                </h4>
-                {video.hook && (
-                  <p className="text-xs text-slate-400 mt-1 line-clamp-2 italic">
-                    "{video.hook}"
-                  </p>
-                )}
+              <div className="p-4 flex-1 flex flex-col justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-100 line-clamp-2 leading-snug">
+                    {video.title}
+                  </h4>
+                  {video.hook && (
+                    <p className="text-xs text-slate-400 mt-1 line-clamp-2 italic">
+                      "{video.hook}"
+                    </p>
+                  )}
+
+                  {/* TikTok Pinned Commentary Preview */}
+                  {video.tiktok_commentary && (
+                    <div className="mt-3 p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-500/20 text-[11px]">
+                      <div className="flex items-center justify-between text-cyan-400 font-bold mb-1">
+                        <span className="flex items-center gap-1">
+                          <MessageSquareQuote className="w-3 h-3" />
+                          <span>TikTok Pinned Comment</span>
+                        </span>
+                        <button
+                          onClick={() => copyToClipboard(video.tiktok_commentary!, `card-comm-${video.id}`)}
+                          className="hover:text-cyan-200 cursor-pointer flex items-center gap-1"
+                        >
+                          {copiedKey === `card-comm-${video.id}` ? (
+                            <Check className="w-3 h-3 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3 h-3" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-slate-300 line-clamp-2 italic">
+                        {video.tiktok_commentary}
+                      </p>
+                    </div>
+                  )}
+                </div>
 
                 {/* Published destinations buttons */}
                 <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-800">
@@ -132,15 +169,13 @@ export const VideoLibrary: React.FC<VideoLibraryProps> = ({ videos, onRefresh })
                     </a>
                   ) : null}
 
-                  {video.video_path ? (
-                    <button
-                      onClick={() => setSelectedVideo(video)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>Inspect</span>
-                    </button>
-                  ) : null}
+                  <button
+                    onClick={() => setSelectedVideo(video)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer ml-auto"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Inspect & Copy</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -148,12 +183,15 @@ export const VideoLibrary: React.FC<VideoLibraryProps> = ({ videos, onRefresh })
         </div>
       )}
 
-      {/* Video Inspector Modal */}
+      {/* Video Inspector & Viral Kit Modal */}
       {selectedVideo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="glass-panel rounded-2xl p-6 border border-slate-700 max-w-xl w-full shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+          <div className="glass-panel rounded-2xl p-6 border border-slate-700 max-w-2xl w-full shadow-2xl relative my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white truncate max-w-md">{selectedVideo.title}</h3>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400">Video Inspector & Growth Kit</span>
+                <h3 className="text-lg font-bold text-white truncate max-w-md">{selectedVideo.title}</h3>
+              </div>
               <button
                 onClick={() => setSelectedVideo(null)}
                 className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold cursor-pointer"
@@ -162,34 +200,118 @@ export const VideoLibrary: React.FC<VideoLibraryProps> = ({ videos, onRefresh })
               </button>
             </div>
 
-            {/* Embedded Video Player if path exists */}
+            {/* Embedded Video Player */}
             {selectedVideo.video_path && (
-              <div className="mb-4 rounded-xl overflow-hidden bg-black border border-slate-800 flex justify-center p-1">
+              <div className="mb-5 rounded-xl overflow-hidden bg-black border border-slate-800 flex justify-center p-2">
                 <video
                   controls
-                  className="max-h-64 w-auto rounded-lg shadow-lg"
+                  className="max-h-72 w-auto rounded-lg shadow-lg"
                   src={`/media/${selectedVideo.video_path.replace(/\\/g, '/').split('output/')[1] || 'video.mp4'}`}
                 />
               </div>
             )}
 
-            <div className="bg-slate-950 rounded-xl p-4 mb-4 border border-slate-800">
-              <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider block mb-1">
-                Narration Script
+            {/* 1. TikTok Pinned Commentary Box */}
+            <div className="bg-gradient-to-r from-cyan-950/60 to-slate-900 rounded-xl p-4 mb-4 border border-cyan-500/30">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <MessageSquareQuote className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-bold text-cyan-300 uppercase tracking-wide">
+                    TikTok Pinned Commentary (Boosts Views & Comments)
+                  </span>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(selectedVideo.tiktok_commentary || '', 'modal-comm')}
+                  className="px-2.5 py-1 rounded-md bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                >
+                  {copiedKey === 'modal-comm' ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Commentary</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-slate-200 leading-relaxed font-medium bg-black/40 p-3 rounded-lg border border-slate-800 select-all">
+                {selectedVideo.tiktok_commentary || `💬 PINNED QUESTION: What is the most mind-bending fact about ${selectedVideo.title} you know? Drop your thoughts below! 👇`}
+              </p>
+              <span className="text-[10px] text-slate-400 block mt-1.5">
+                💡 Tip: Post this immediately after publishing and pin it. Videos with an active pinned comment get up to 3x more replies, accelerating TikTok FYP distribution.
               </span>
-              <p className="text-xs text-slate-300 leading-relaxed max-h-48 overflow-y-auto">
+            </div>
+
+            {/* 2. TikTok Caption & Viral Hashtags */}
+            <div className="bg-slate-950 rounded-xl p-4 mb-4 border border-slate-800">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Hash className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">
+                    TikTok Caption & Reach Hashtags
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    const fullCaption = `${selectedVideo.title} 🤯 Science breakdown you didn't know!\n\n${selectedVideo.tiktok_hashtags || '#fyp #foryou #learnontiktok #stemtok #science'}`;
+                    copyToClipboard(fullCaption, 'modal-tags');
+                  }}
+                  className="px-2.5 py-1 rounded-md bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                >
+                  {copiedKey === 'modal-tags' ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Caption & Tags</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="bg-black/40 p-3 rounded-lg border border-slate-800 text-xs text-slate-300 font-mono select-all">
+                <p className="text-slate-100 font-bold mb-1">{selectedVideo.title} 🤯 Science breakdown you didn't know!</p>
+                <p className="text-cyan-400">{selectedVideo.tiktok_hashtags || '#fyp #foryou #foryoupage #viral #trending #learnontiktok #stemtok #sciencetok #factsdaily'}</p>
+              </div>
+            </div>
+
+            {/* 3. Full Narration Script */}
+            <div className="bg-slate-950 rounded-xl p-4 mb-4 border border-slate-800">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">
+                  Full Narration Script
+                </span>
+                <button
+                  onClick={() => copyToClipboard(selectedVideo.script || '', 'modal-script')}
+                  className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  {copiedKey === 'modal-script' ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  <span>Copy Script</span>
+                </button>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed max-h-40 overflow-y-auto">
                 {selectedVideo.script || 'Script unavailable.'}
               </p>
             </div>
 
+            {/* Quick Metadata */}
             <div className="grid grid-cols-2 gap-3 text-xs mb-4">
-              <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                <span className="text-slate-500 block">Created At</span>
-                <span className="font-semibold text-slate-300">{selectedVideo.created_at || 'Just now'}</span>
-              </div>
               <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
                 <span className="text-slate-500 block">Duration</span>
                 <span className="font-semibold text-slate-300">{selectedVideo.duration.toFixed(1)} seconds</span>
+              </div>
+              <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-slate-500 block">Published Destinations</span>
+                <span className="font-semibold text-slate-300 uppercase">{selectedVideo.published_destinations || 'Local Storage'}</span>
               </div>
             </div>
 

@@ -1,7 +1,7 @@
 import os
 from contextlib import contextmanager
 from typing import Generator
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from backend.config import settings
 from backend.database.models import Base, SettingModel
@@ -23,6 +23,22 @@ def init_db(db_path: str = None):
     engine = get_engine(db_path)
     Base.metadata.create_all(bind=engine)
     
+    # Lightweight migration check for newly added columns in SQLite
+    with engine.connect() as conn:
+        try:
+            res = conn.execute(text("PRAGMA table_info(videos)")).fetchall()
+            existing_cols = {row[1] for row in res}
+            if existing_cols:
+                if "tiktok_commentary" not in existing_cols:
+                    conn.execute(text("ALTER TABLE videos ADD COLUMN tiktok_commentary TEXT"))
+                if "tiktok_hashtags" not in existing_cols:
+                    conn.execute(text("ALTER TABLE videos ADD COLUMN tiktok_hashtags TEXT"))
+                if "youtube_tags" not in existing_cols:
+                    conn.execute(text("ALTER TABLE videos ADD COLUMN youtube_tags TEXT"))
+                conn.commit()
+        except Exception:
+            pass
+
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     with SessionLocal() as session:
         # Ensure default setting exists
@@ -59,9 +75,5 @@ def get_db(db_path: str = None) -> Generator[Session, None, None]:
             session.add(st)
             session.commit()
         yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
     finally:
         session.close()

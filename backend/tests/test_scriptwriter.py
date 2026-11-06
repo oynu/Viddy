@@ -27,6 +27,15 @@ def test_script_generation():
     assert len(script.call_to_action) > 0
     assert script.tiktok_caption is not None
     assert "#shorts" in script.youtube_tags
+    
+    # Test TikTok Pinned Commentary & Reach Hashtags
+    assert script.tiktok_commentary is not None
+    assert "PINNED QUESTION" in script.tiktok_commentary
+    assert "👇" in script.tiktok_commentary
+    assert "#fyp" in script.tiktok_hashtags
+    assert "#foryou" in script.tiktok_hashtags
+    assert "#learnontiktok" in script.tiktok_hashtags
+    assert "#stemtok" in script.tiktok_hashtags
 
 def test_visual_director_plan():
     director = VisualDirectorAgent()
