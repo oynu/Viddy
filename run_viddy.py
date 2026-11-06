@@ -5,14 +5,29 @@ Continuous 24/7 autonomous short-form educational video generator.
 """
 import os
 import sys
-import shutil
-import uvicorn
+import subprocess
 from pathlib import Path
 
-# Add project root to sys.path
+# Auto-bootstrap virtualenv: if running with system Python, transparently delegate to .venv
 root_dir = Path(__file__).resolve().parent
+venv_python = root_dir / ".venv" / "Scripts" / "python.exe" if os.name == "nt" else root_dir / ".venv" / "bin" / "python"
+
+if venv_python.exists():
+    try:
+        current_python = Path(sys.executable).resolve()
+        target_python = venv_python.resolve()
+        if current_python != target_python:
+            # Re-execute seamlessly under the isolated virtual environment
+            exit_code = subprocess.call([str(target_python), str(__file__)] + sys.argv[1:])
+            sys.exit(exit_code)
+    except Exception:
+        pass
+
+# Add project root to sys.path
 if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
+
+import shutil
 
 def print_banner():
     banner = r"""
@@ -33,24 +48,26 @@ def check_environment():
     print("[1/3] Checking environment...")
     
     # Check FFmpeg
-    ffmpeg_cmd = shutil.which("ffmpeg")
-    if ffmpeg_cmd:
-        print(f"  ✓ FFmpeg detected: {ffmpeg_cmd}")
+    from backend.config import settings
+    if settings.ffmpeg_path and Path(settings.ffmpeg_path).exists():
+        print(f"  [OK] FFmpeg detected: {settings.ffmpeg_path}")
+    elif shutil.which("ffmpeg"):
+        print(f"  [OK] FFmpeg detected in PATH: {shutil.which('ffmpeg')}")
     else:
-        print("  ! FFmpeg not in PATH. Ensure FFmpeg is configured in settings.")
+        print("  [!] FFmpeg not detected. Please verify installation.")
 
     # Check Blender
     from backend.blender.runner import BlenderRunner
     runner = BlenderRunner()
     if runner.is_blender_available():
-        print(f"  ✓ Blender 3D Engine detected: {runner.blender_path}")
+        print(f"  [OK] Blender 3D Engine detected: {runner.blender_path}")
     else:
-        print("  ! Blender binary not detected on PATH. High-fidelity procedural 3D synthesis fallback will be active.")
+        print("  [!] Blender binary not detected on PATH. High-fidelity procedural 3D synthesis fallback active.")
         
     print("[2/3] Initializing persistent database...")
     from backend.database.session import init_db
     init_db()
-    print("  ✓ Database initialized at data/viddy.db")
+    print("  [OK] Database initialized at data/viddy.db")
 
 def main():
     print_banner()
@@ -62,6 +79,7 @@ def main():
     print(f"[3/3] Starting Viddy Autonomous Studio at: http://localhost:{port}")
     print("Press Ctrl+C to terminate studio.")
     
+    import uvicorn
     uvicorn.run("backend.main:app", host=host, port=port, reload=False)
 
 if __name__ == "__main__":
