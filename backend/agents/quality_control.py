@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
+from backend.config import settings
 
 class QCReport(BaseModel):
     passed: bool
@@ -17,7 +18,7 @@ class QCReport(BaseModel):
 
 class QualityControlAgent:
     def __init__(self, ffprobe_path: Optional[str] = None):
-        self.ffprobe_path = ffprobe_path or shutil.which("ffprobe") or "ffprobe"
+        self.ffprobe_path = ffprobe_path or settings.ffprobe_path
 
     def probe_video(self, video_path: str) -> Optional[Dict[str, Any]]:
         """Probes video metadata using ffprobe JSON output."""

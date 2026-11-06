@@ -4,10 +4,11 @@ import subprocess
 import asyncio
 from pathlib import Path
 from typing import List, Optional
+from backend.config import settings
 
 class Compositor:
     def __init__(self, ffmpeg_path: Optional[str] = None):
-        self.ffmpeg_path = ffmpeg_path or shutil.which("ffmpeg") or "ffmpeg"
+        self.ffmpeg_path = ffmpeg_path or settings.ffmpeg_path
 
     def build_assembly_command(
         self,

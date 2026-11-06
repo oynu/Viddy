@@ -2,6 +2,8 @@ import os
 import wave
 import math
 import struct
+import shutil
+import subprocess
 import asyncio
 from typing import Tuple, Optional
 from pathlib import Path
@@ -48,14 +50,38 @@ class AudioEngine:
         return fallback_path, duration
 
     def _estimate_or_read_duration(self, file_path: str, text: str) -> float:
-        """Estimates duration from file size or word count."""
+        """Reads exact duration from audio file using wave/ffprobe, with fallback to WPM calculation."""
+        # 1. Try reading standard WAV header
         try:
-            # Word-count based estimate for 140 WPM speech
-            words = len(text.split())
-            est_seconds = max(2.0, (words / 140.0) * 60.0)
-            return round(est_seconds, 2)
+            with wave.open(file_path, "r") as wf:
+                frames = wf.getnframes()
+                rate = wf.getframerate()
+                if rate > 0 and frames > 0:
+                    return round(frames / float(rate), 2)
         except Exception:
-            return 5.0
+            pass
+
+        # 2. Try ffprobe for MP3 / AAC
+        try:
+            ffprobe = shutil.which("ffprobe") or "ffprobe"
+            cmd = [
+                ffprobe, "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                file_path
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if res.returncode == 0 and res.stdout.strip():
+                dur = float(res.stdout.strip())
+                if dur > 0.1:
+                    return round(dur, 2)
+        except Exception:
+            pass
+            
+        # 3. Fallback to word-count based estimate for 140 WPM speech
+        words = len(text.split())
+        est_seconds = max(2.0, (words / 140.0) * 60.0)
+        return round(est_seconds, 2)
 
     def _generate_fallback_audio(self, text: str, output_path: str) -> float:
         """Generates a clean, valid synthesized WAV audio file for testing or offline mode."""

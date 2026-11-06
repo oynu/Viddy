@@ -57,7 +57,7 @@ class AutonomousWorker:
         self.compositor = Compositor()
         self.qc_agent = QualityControlAgent()
         self.publish_mgr = PublishingManager(db_path=db_path, storage_dir=str(self.storage_dir / "published"))
-        self.recovery_mgr = RecoveryManager(db_path=db_path)
+        self.recovery_mgr = RecoveryManager(db_path=db_path, storage_dir=str(self.storage_dir))
         
         self._worker_task: Optional[asyncio.Task] = None
         self._subscribers: List[Callable[[Dict[str, Any]], Any]] = []
@@ -67,7 +67,7 @@ class AutonomousWorker:
         self._subscribers.append(callback)
 
     async def _emit_event(self, event_type: str, data: Dict[str, Any]):
-        """Emits an event to registered listeners (e.g. WebSockets)."""
+        """Emits an event to registered listeners (e.g. WebSockets) and updates active job in DB."""
         payload = {
             "type": event_type,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -79,6 +79,21 @@ class AutonomousWorker:
             "job_id": self.current_job_id,
             **data
         }
+        
+        # Persist stage progress to SQLite
+        if self.db_path and self.current_job_id:
+            try:
+                with get_db(self.db_path) as session:
+                    crud.update_job(
+                        session=session,
+                        job_id=self.current_job_id,
+                        stage=self.current_stage.value,
+                        progress=self.progress,
+                        current_action=self.current_action
+                    )
+            except Exception:
+                pass
+                
         for cb in self._subscribers:
             try:
                 res = cb(payload)
@@ -107,7 +122,6 @@ class AutonomousWorker:
         self._log("Autonomous Video Production Agent started.", level="SUCCESS")
         await self._emit_event("AGENT_STARTED", {"message": "Autonomous production loop started."})
         
-        # Launch continuous loop in background task
         self._worker_task = asyncio.create_task(self._continuous_loop())
 
     async def pause(self):
@@ -157,7 +171,6 @@ class AutonomousWorker:
         """
         while self.state == AgentState.RUNNING:
             try:
-                # Check paused state
                 if self.state == AgentState.PAUSED:
                     await asyncio.sleep(1.0)
                     continue
@@ -169,22 +182,32 @@ class AutonomousWorker:
                     await asyncio.sleep(60.0)
                     continue
                     
+                # Dynamically retrieve updated delay from settings
+                delay = self.cycle_delay_seconds
+                if self.db_path:
+                    with get_db(self.db_path) as session:
+                        st = crud.get_settings(session)
+                        if st.cycle_delay_seconds:
+                            delay = st.cycle_delay_seconds
+                            
                 # Run complete production cycle
                 await self.run_single_production_cycle()
                 
                 # Minimum throttle pause between consecutive productions
                 if self.state == AgentState.RUNNING:
-                    self.current_action = f"Production complete. Starting next discovery cycle in {self.cycle_delay_seconds}s..."
+                    self.current_action = f"Production complete. Starting next discovery cycle in {delay}s..."
                     self.current_stage = PipelineStage.IDLE
                     self.progress = 100.0
-                    await self._emit_event("CYCLE_COOLDOWN", {"delay": self.cycle_delay_seconds})
-                    await asyncio.sleep(self.cycle_delay_seconds)
+                    await self._emit_event("CYCLE_COOLDOWN", {"delay": delay})
+                    await asyncio.sleep(delay)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 self._log(f"Production cycle exception: {str(e)}", stage="ERROR", level="ERROR")
+                if self.db_path and self.current_job_id:
+                    with get_db(self.db_path) as session:
+                        crud.update_job(session, self.current_job_id, status="failed", details=str(e))
                 await self._emit_event("ERROR", {"error": str(e)})
-                # Intelligent backoff on error without killing the continuous loop
                 await asyncio.sleep(5.0)
 
     def _check_daily_limits(self) -> bool:
@@ -202,8 +225,7 @@ class AutonomousWorker:
 
     async def run_single_production_cycle(self) -> Optional[int]:
         """
-        Executes one end-to-end autonomous video production cycle.
-        Returns the created video_id upon success.
+        Executes one end-to-end autonomous video production cycle with up to 2 retries on QC failure.
         """
         work_dir = self.storage_dir / f"prod_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
         work_dir.mkdir(parents=True, exist_ok=True)
@@ -212,13 +234,11 @@ class AutonomousWorker:
         self.current_stage = PipelineStage.DISCOVER
         self.progress = 10.0
         self.current_action = "Discovering original educational concept..."
-        await self._emit_event("STAGE_CHANGE", {})
         
         idea = self.discovery_agent.discover_next_idea()
         self.discovery_agent.record_idea(idea)
         self._log(f"Discovered idea: '{idea.title}' ({idea.category})", stage="DISCOVERY", level="SUCCESS")
         
-        # Create video and job in DB
         video_id = None
         job_id = None
         if self.db_path:
@@ -237,6 +257,8 @@ class AutonomousWorker:
                 job_id = job.id
                 self.current_video_id = video_id
                 self.current_job_id = job_id
+
+        await self._emit_event("STAGE_CHANGE", {})
                 
         # 2. RESEARCH
         self.current_stage = PipelineStage.RESEARCH
@@ -263,92 +285,103 @@ class AutonomousWorker:
         await self._emit_event("STAGE_CHANGE", {})
         plan = self.visual_director.create_production_plan(concept, script)
         
-        # 5. RENDER_3D
-        self.current_stage = PipelineStage.RENDER_3D
-        self.progress = 65.0
-        self.current_action = f"Rendering {len(plan.scenes)} low-poly 3D scenes (1080x1920 @ 30FPS)..."
-        await self._emit_event("STAGE_CHANGE", {})
-        
-        rendered_clips = []
-        if self.simulated_media:
-            # Fast test mock clip
-            mock_clip = work_dir / "scene_1.mp4"
-            mock_clip.write_bytes(b"dummy clip data 1080x1920")
-            rendered_clips.append(str(mock_clip))
-        else:
-            for s_idx, scene in enumerate(plan.scenes):
-                clip_path = await self.blender_runner.render_scene_async(
-                    scene=scene,
-                    output_dir=str(work_dir / f"scene_{scene.scene_id}"),
-                    output_video_name=f"scene_{scene.scene_id}.mp4"
+        # 5-7. RENDER, ASSEMBLE & QC (WITH AUTOMATED RETRY UP TO 2 TIMES)
+        max_attempts = 2
+        for attempt in range(1, max_attempts + 1):
+            # 5. RENDER_3D
+            self.current_stage = PipelineStage.RENDER_3D
+            self.progress = 65.0
+            self.current_action = f"Rendering {len(plan.scenes)} low-poly 3D scenes (Attempt {attempt}/{max_attempts})..."
+            await self._emit_event("STAGE_CHANGE", {"attempt": attempt})
+            
+            rendered_clips = []
+            if self.simulated_media:
+                mock_clip = work_dir / f"scene_1_att{attempt}.mp4"
+                mock_clip.write_bytes(b"dummy clip data 1080x1920")
+                rendered_clips.append(str(mock_clip))
+            else:
+                for s_idx, scene in enumerate(plan.scenes):
+                    clip_path = await self.blender_runner.render_scene_async(
+                        scene=scene,
+                        output_dir=str(work_dir / f"scene_{scene.scene_id}"),
+                        output_video_name=f"scene_{scene.scene_id}.mp4",
+                        timeout_seconds=120.0
+                    )
+                    rendered_clips.append(clip_path)
+                    self.progress = 65.0 + ((s_idx + 1) / len(plan.scenes)) * 10.0
+                    await self._emit_event("RENDER_PROGRESS", {"scene_index": s_idx + 1, "total_scenes": len(plan.scenes)})
+
+            # 6. AUDIO & ASSEMBLY
+            self.current_stage = PipelineStage.AUDIO_ASSEMBLY
+            self.progress = 80.0
+            self.current_action = "Synthesizing voice narration, ASS vertical subtitles & audio muxing..."
+            await self._emit_event("STAGE_CHANGE", {})
+            
+            narration_path = str(work_dir / f"narration_att{attempt}.mp3")
+            subtitles_path = str(work_dir / f"subtitles_att{attempt}.ass")
+            final_video_path = str(work_dir / f"final_video_att{attempt}.mp4")
+            thumbnail_path = str(work_dir / f"thumbnail_att{attempt}.jpg")
+            
+            if self.simulated_media:
+                Path(narration_path).write_bytes(b"dummy mp3 data")
+                Path(subtitles_path).write_text("[Script Info]\nPlayResY: 1920\n", encoding="utf-8")
+                Path(final_video_path).write_bytes(b"dummy full video data")
+                Path(thumbnail_path).write_bytes(b"dummy jpg data")
+                actual_duration = script.estimated_duration
+            else:
+                voice_path, actual_duration = await self.audio_engine.generate_voiceover(
+                    text=script.full_narration,
+                    output_path=narration_path
                 )
-                rendered_clips.append(clip_path)
-                self.progress = 65.0 + ((s_idx + 1) / len(plan.scenes)) * 10.0
-                await self._emit_event("RENDER_PROGRESS", {"scene_index": s_idx + 1, "total_scenes": len(plan.scenes)})
+                self.subtitle_gen.generate_styled_ass(
+                    text=script.full_narration,
+                    total_duration=actual_duration,
+                    output_path=subtitles_path
+                )
+                bgm_path = self.audio_engine.generate_ambient_bgm(
+                    output_path=str(work_dir / f"ambient_bgm_att{attempt}.wav"),
+                    duration=actual_duration
+                )
+                await self.compositor.assemble_video_async(
+                    video_clips=rendered_clips,
+                    narration_path=voice_path,
+                    bgm_path=bgm_path,
+                    subtitles_path=subtitles_path,
+                    output_path=final_video_path
+                )
+                self.compositor.extract_thumbnail(final_video_path, thumbnail_path)
+
+            # 7. QUALITY CONTROL
+            self.current_stage = PipelineStage.QC
+            self.progress = 90.0
+            self.current_action = "Running automated quality control inspection..."
+            await self._emit_event("STAGE_CHANGE", {})
+            
+            qc_report = self.qc_agent.validate_video(final_video_path)
+            if self.simulated_media:
+                qc_report = QCReport(passed=True, duration=actual_duration, width=1080, height=1920, has_audio=True)
                 
-        # 6. AUDIO & ASSEMBLY
-        self.current_stage = PipelineStage.AUDIO_ASSEMBLY
-        self.progress = 80.0
-        self.current_action = "Synthesizing voice narration, ASS vertical subtitles & audio muxing..."
-        await self._emit_event("STAGE_CHANGE", {})
-        
-        narration_path = str(work_dir / "narration.wav")
-        subtitles_path = str(work_dir / "subtitles.ass")
-        final_video_path = str(work_dir / "final_video.mp4")
-        thumbnail_path = str(work_dir / "thumbnail.jpg")
-        
-        if self.simulated_media:
-            # Fast test audio
-            Path(narration_path).write_bytes(b"dummy wav data")
-            Path(subtitles_path).write_text("[Script Info]\nPlayResY: 1920\n", encoding="utf-8")
-            Path(final_video_path).write_bytes(b"dummy full video data")
-            Path(thumbnail_path).write_bytes(b"dummy jpg data")
-            actual_duration = script.estimated_duration
-        else:
-            # Generate real TTS voiceover & subtitles
-            voice_path, actual_duration = await self.audio_engine.generate_voiceover(
-                text=script.full_narration,
-                output_path=narration_path
-            )
-            self.subtitle_gen.generate_styled_ass(
-                text=script.full_narration,
-                total_duration=actual_duration,
-                output_path=subtitles_path
-            )
-            bgm_path = self.audio_engine.generate_ambient_bgm(
-                output_path=str(work_dir / "ambient_bgm.wav"),
-                duration=actual_duration
-            )
-            
-            # Assemble with FFmpeg
-            await self.compositor.assemble_video_async(
-                video_clips=rendered_clips,
-                narration_path=voice_path,
-                bgm_path=bgm_path,
-                subtitles_path=subtitles_path,
-                output_path=final_video_path
-            )
-            self.compositor.extract_thumbnail(final_video_path, thumbnail_path)
-            
-        # 7. QUALITY CONTROL (QC)
-        self.current_stage = PipelineStage.QC
-        self.progress = 90.0
-        self.current_action = "Running automated quality control inspection..."
-        await self._emit_event("STAGE_CHANGE", {})
-        
-        qc_report = self.qc_agent.validate_video(final_video_path)
-        if self.simulated_media:
-            qc_report = QCReport(passed=True, duration=actual_duration, width=1080, height=1920, has_audio=True)
-            
-        if not qc_report.passed:
-            self._log(f"Video QC failed: {', '.join(qc_report.issues)}. Quarantining.", stage="QC", level="WARNING")
-            if self.db_path and video_id:
-                with get_db(self.db_path) as session:
-                    crud.update_video(session, video_id, status="failed", qc_details=", ".join(qc_report.issues))
-            return None
-            
-        self._log(f"QC Passed successfully! Duration: {qc_report.duration:.1f}s", stage="QC", level="SUCCESS")
-        
+            if qc_report.passed:
+                self._log(f"QC Passed successfully! Duration: {qc_report.duration:.1f}s", stage="QC", level="SUCCESS")
+                break
+            else:
+                self._log(f"Attempt {attempt} QC failed: {', '.join(qc_report.issues)}", stage="QC", level="WARNING")
+                if self.db_path and video_id:
+                    with get_db(self.db_path) as session:
+                        v = crud.get_video_by_id(session, video_id)
+                        if v:
+                            v.retry_count = attempt
+                            session.commit()
+                if attempt == max_attempts:
+                    self._log(f"Video '{idea.title}' failed all {max_attempts} QC attempts. Quarantining.", stage="QC", level="ERROR")
+                    if self.db_path and video_id:
+                        with get_db(self.db_path) as session:
+                            crud.update_video(session, video_id, status="failed", qc_details=", ".join(qc_report.issues))
+                            if job_id:
+                                crud.update_job(session, job_id, status="failed", details=", ".join(qc_report.issues))
+                    return None
+                await asyncio.sleep(2.0)
+
         # 8. PUBLISHING
         self.current_stage = PipelineStage.PUBLISH
         self.progress = 95.0
@@ -397,7 +430,6 @@ class AutonomousWorker:
                 )
                 if job_id:
                     crud.update_job(session, job_id, status="completed", progress=100.0)
-                # Increment daily counter
                 st = crud.get_settings(session)
                 st.daily_videos_produced += 1
                 session.commit()

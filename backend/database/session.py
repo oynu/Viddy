@@ -41,9 +41,23 @@ def init_db(db_path: str = None):
 @contextmanager
 def get_db(db_path: str = None) -> Generator[Session, None, None]:
     engine = get_engine(db_path)
+    # Ensure tables exist
+    Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     session = SessionLocal()
     try:
+        # Ensure default settings exist
+        st = session.query(SettingModel).filter(SettingModel.id == 1).first()
+        if not st:
+            st = SettingModel(
+                id=1,
+                running_mode=settings.default_running_mode,
+                publish_destination=settings.default_destination,
+                max_daily_videos=settings.max_daily_videos,
+                cycle_delay_seconds=settings.min_cycle_delay_seconds
+            )
+            session.add(st)
+            session.commit()
         yield session
         session.commit()
     except Exception:

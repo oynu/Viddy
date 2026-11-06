@@ -162,6 +162,17 @@ export const VideoLibrary: React.FC<VideoLibraryProps> = ({ videos, onRefresh })
               </button>
             </div>
 
+            {/* Embedded Video Player if path exists */}
+            {selectedVideo.video_path && (
+              <div className="mb-4 rounded-xl overflow-hidden bg-black border border-slate-800 flex justify-center p-1">
+                <video
+                  controls
+                  className="max-h-64 w-auto rounded-lg shadow-lg"
+                  src={`/media/${selectedVideo.video_path.replace(/\\/g, '/').split('output/')[1] || 'video.mp4'}`}
+                />
+              </div>
+            )}
+
             <div className="bg-slate-950 rounded-xl p-4 mb-4 border border-slate-800">
               <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider block mb-1">
                 Narration Script

@@ -1,6 +1,6 @@
 import os
-from typing import List, Optional
-from datetime import datetime, timezone
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel, Field
 from backend.publishing.local_publisher import LocalPublisher
 from backend.publishing.youtube_publisher import YouTubePublisher
@@ -39,29 +39,60 @@ class PublishingManager:
             return [pref]
         return ["local"]
 
+    async def get_valid_token(self, platform: str) -> Optional[str]:
+        """
+        Retrieves active OAuth access token with automated refresh guard.
+        If expired or near expiry (within 5 min buffer), invokes platform refresh endpoint
+        and saves updated token to persistent database.
+        """
+        if not self.db_path:
+            return None
+            
+        with get_db(self.db_path) as session:
+            acc = crud.get_platform_account(session, platform)
+            if not acc or not acc.is_connected:
+                return None
+                
+            now = datetime.now(timezone.utc)
+            needs_refresh = False
+            
+            # Check if expiry is present and within 5 minutes of expiring
+            if acc.token_expiry:
+                expiry = acc.token_expiry
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+                if expiry <= now + timedelta(minutes=5):
+                    needs_refresh = True
+            elif not acc.access_token:
+                needs_refresh = True
+                
+            if needs_refresh and acc.refresh_token:
+                publisher = self.youtube_pub if platform == "youtube" else self.tiktok_pub
+                renewed = await publisher.refresh_access_token(acc.refresh_token)
+                if renewed and renewed.get("access_token"):
+                    acc = crud.upsert_platform_account(
+                        session=session,
+                        platform=platform,
+                        access_token=renewed["access_token"],
+                        refresh_token=renewed.get("refresh_token") or acc.refresh_token,
+                        token_expiry=renewed.get("expiry")
+                    )
+                    crud.add_log(session, f"Refreshed OAuth access token for {platform}.", stage="PUBLISH", level="INFO")
+                    return acc.access_token
+                    
+            return acc.access_token
+
     async def publish(self, req: PublishRequest) -> List[PublishResult]:
         """
         Executes parallel or sequential publishing across all configured target destinations.
+        Guarantees token freshness before network transmission.
         """
         results: List[PublishResult] = []
         
-        # Expand 'both' if in request destinations
         target_platforms = set()
         for d in req.destinations:
             for p in self.resolve_destinations(d):
                 target_platforms.add(p)
-                
-        # Retrieve credentials from SQLite if db_path provided
-        yt_token = None
-        tt_token = None
-        if self.db_path:
-            with get_db(self.db_path) as session:
-                yt_acc = crud.get_platform_account(session, "youtube")
-                if yt_acc and yt_acc.is_connected:
-                    yt_token = yt_acc.access_token
-                tt_acc = crud.get_platform_account(session, "tiktok")
-                if tt_acc and tt_acc.is_connected:
-                    tt_token = tt_acc.access_token
 
         for platform in target_platforms:
             if platform == "local":
@@ -79,12 +110,13 @@ class PublishingManager:
                     error_message=res.error_message
                 ))
             elif platform == "youtube":
+                token = await self.get_valid_token("youtube")
                 res = await self.youtube_pub.upload_shorts_video(
                     video_path=req.video_path,
                     title=req.title,
                     description=req.description,
                     tags=req.tags,
-                    access_token=yt_token
+                    access_token=token
                 )
                 results.append(PublishResult(
                     platform="youtube",
@@ -93,10 +125,11 @@ class PublishingManager:
                     error_message=res.error_message
                 ))
             elif platform == "tiktok":
+                token = await self.get_valid_token("tiktok")
                 res = await self.tiktok_pub.publish_video(
                     video_path=req.video_path,
                     caption=f"{req.title} {' '.join(req.tags[:4])}",
-                    access_token=tt_token
+                    access_token=token
                 )
                 results.append(PublishResult(
                     platform="tiktok",

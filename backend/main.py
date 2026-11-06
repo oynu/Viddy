@@ -30,10 +30,11 @@ worker.subscribe(forward_event_to_ws)
 async def lifespan(app: FastAPI):
     # Startup: ensure DB and tables initialized
     init_db()
-    # Check if configured to auto-start continuous loop
     from backend.database.session import get_db
     from backend.database import crud
     with get_db() as session:
+        # Unconditionally recover any abandoned jobs or orphaned states
+        worker.recovery_mgr.recover_interrupted_jobs(session)
         st = crud.get_settings(session)
         if st.running_mode == "continuous":
             # Auto-start worker in background on server boot
