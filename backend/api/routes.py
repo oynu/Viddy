@@ -308,7 +308,13 @@ def save_tiktok_cookies_route(payload: TikTokCookiesPayload):
 @router.post("/channels/tiktok/login-browser")
 async def trigger_tiktok_browser_login():
     from backend.publishing.tiktok_auth import launch_interactive_tiktok_login
-    asyncio.create_task(launch_interactive_tiktok_login(headless=False))
+    async def _safe_login():
+        try:
+            await launch_interactive_tiktok_login(headless=False)
+        except Exception as e:
+            with get_db() as s:
+                crud.add_log(s, f"TikTok Brave login error: {str(e)}", stage="PUBLISH", level="ERROR")
+    asyncio.create_task(_safe_login())
     return {"message": "TikTok login window launched. Please sign in on the browser window to save your session."}
 
 @router.post("/channels/youtube/token")

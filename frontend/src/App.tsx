@@ -164,8 +164,20 @@ export const App: React.FC = () => {
 
 const handleLaunchTikTokBrowser = async () => {
     try {
-      showNotification('Opening browser window... Please sign in to your TikTok account.');
+      showNotification('Opening Brave Browser window... Please sign in to your TikTok account.');
       await fetch('/api/channels/tiktok/login-browser', { method: 'POST' });
+      const pollTimer = setInterval(async () => {
+        try {
+          const res = await fetch('/api/channels');
+          const data = await res.json();
+          if (data?.tiktok?.connected) {
+            setChannels(data);
+            showNotification('TikTok Brave session connected and verified!');
+            clearInterval(pollTimer);
+          }
+        } catch (_) {}
+      }, 3000);
+      setTimeout(() => clearInterval(pollTimer), 120000);
     } catch (e) {
       showNotification('Failed to launch browser login.');
     }
@@ -436,7 +448,7 @@ const handleConnectToken = async (platform: string, token: string) => {
                       className="px-4 py-2 bg-white text-black font-semibold rounded text-xs hover:bg-[#eaeaea] cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Connect TikTok with Browser (1-Click Login)</span>
+                      <span>Connect with Brave Browser (1-Click Login)</span>
                     </button>
                     <span className="text-[#555] text-center sm:text-left">or paste cookies.json below:</span>
                   </div>
