@@ -13,7 +13,7 @@ class SettingModel(Base):
     
     id = Column(Integer, primary_key=True, default=1)
     running_mode = Column(String(50), default="continuous")  # continuous, limited, paused, stopped
-    publish_destination = Column(String(50), default="local")  # local, youtube, tiktok, both
+    publish_destination = Column(String(50), default="tiktok")  # tiktok, youtube, both, local
     max_daily_videos = Column(Integer, default=24)
     daily_videos_produced = Column(Integer, default=0)
     last_reset_date = Column(String(20), default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d"))

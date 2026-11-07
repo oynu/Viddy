@@ -41,3 +41,7 @@ def test_api_status_and_controls():
         logs_res = client.get("/api/logs")
         assert logs_res.status_code == 200
         assert isinstance(logs_res.json(), list)
+
+        # 6. Check auto-publish endpoint with invalid id returns 404
+        pub_res = client.post("/api/videos/99999/auto-publish", json={"destination": "tiktok"})
+        assert pub_res.status_code == 404

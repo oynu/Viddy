@@ -1,3 +1,4 @@
+import os
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -213,6 +214,53 @@ def get_video_detail(video_id: int):
             "error_message": v.error_message,
             "created_at": v.created_at.isoformat() if v.created_at else None
         }
+
+class AutoPublishRequest(BaseModel):
+    destination: str = "tiktok"
+
+@router.post("/videos/{video_id}/auto-publish")
+async def auto_publish_video_endpoint(video_id: int, req: Optional[AutoPublishRequest] = None):
+    worker = get_worker()
+    dest = (req.destination if req else "tiktok").lower()
+    
+    with get_db() as session:
+        v = crud.get_video_by_id(session, video_id)
+        if not v:
+            raise HTTPException(status_code=404, detail="Video not found")
+        if not v.video_path or not os.path.exists(v.video_path):
+            raise HTTPException(status_code=400, detail="Video file does not exist on disk")
+
+        from backend.publishing.publish_manager import PublishRequest, PublishingManager
+        pub_req = PublishRequest(
+            video_path=v.video_path,
+            title=v.title,
+            description=v.script,
+            tags=v.youtube_tags.split(",") if v.youtube_tags else ["science", "education"],
+            tiktok_caption=v.title,
+            tiktok_hashtags=v.tiktok_hashtags,
+            tiktok_commentary=v.tiktok_commentary,
+            thumbnail_path=v.thumbnail_path,
+            destinations=[dest]
+        )
+        
+        pub_mgr = worker.publish_mgr if worker else PublishingManager()
+        results = await pub_mgr.publish(pub_req)
+        
+        successful = [r for r in results if r.success]
+        if successful:
+            v.status = "published"
+            v.published_destinations = ",".join(list(set(filter(None, [v.published_destinations, dest]))))
+            for r in successful:
+                if r.platform == "tiktok" and r.url:
+                    v.tiktok_url = r.url
+                elif r.platform == "youtube" and r.url:
+                    v.youtube_url = r.url
+            session.commit()
+            return {"success": True, "message": f"Successfully published to {dest}!", "results": [r.model_dump(mode='json') for r in results]}
+        else:
+            errors = [r.error_message for r in results if r.error_message]
+            err_msg = "; ".join(errors) if errors else "Publishing failed. Check channel credentials."
+            return {"success": False, "message": err_msg, "results": [r.model_dump(mode='json') for r in results]}
 
 # Platform Accounts & Connections
 class TikTokCookiesPayload(BaseModel):

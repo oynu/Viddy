@@ -142,7 +142,27 @@ export const App: React.FC = () => {
     await fetchStatus();
   };
 
-    const handleLaunchTikTokBrowser = async () => {
+      const handleAutoPublish = async (videoId: number, platform: string = 'tiktok') => {
+    try {
+      showNotification(`Initiating automated background upload to ${platform.toUpperCase()} via Playwright...`);
+      const res = await fetch(`/api/videos/${videoId}/auto-publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination: platform })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification(`✓ Video successfully published to ${platform.toUpperCase()}!`);
+        await fetchVideos();
+      } else {
+        showNotification(`Publishing status: ${data.message}`);
+      }
+    } catch (e) {
+      showNotification('Publishing request failed.');
+    }
+  };
+
+const handleLaunchTikTokBrowser = async () => {
     try {
       showNotification('Opening browser window... Please sign in to your TikTok account.');
       await fetch('/api/channels/tiktok/login-browser', { method: 'POST' });
@@ -522,23 +542,23 @@ const handleConnectToken = async (platform: string, token: string) => {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      {/* 1-Click TikTok Creator Web Studio */}
+                      {/* Auto-Publish via Playwright */}
                       <button
-                        onClick={() => openTikTokUpload(video)}
-                        className="px-3 py-1.5 rounded bg-white text-black hover:bg-[#eaeaea] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
-                        title="Opens TikTok Creator Studio and auto-copies caption & tags"
+                        onClick={() => handleAutoPublish(video.id, 'tiktok')}
+                        className="px-3.5 py-1.5 rounded bg-white text-black hover:bg-[#eaeaea] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                        title="Uploads video, injects caption and hashtags, and clicks Post automatically via Playwright"
                       >
-                        <UploadCloud className="w-3.5 h-3.5" />
-                        <span>Publish to TikTok</span>
+                        <UploadCloud className="w-3.5 h-3.5 text-black" />
+                        <span>Auto-Upload to TikTok</span>
                       </button>
 
-                      {/* 1-Click YouTube Studio */}
+                      {/* Auto-Publish to YouTube Shorts */}
                       <button
-                        onClick={() => openYouTubeUpload(video)}
+                        onClick={() => handleAutoPublish(video.id, 'youtube')}
                         className="px-3 py-1.5 rounded bg-[#161616] text-white hover:bg-[#252525] border border-[#2a2a2a] text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all"
-                        title="Opens YouTube Shorts upload and auto-copies description"
+                        title="Uploads directly to YouTube Shorts via Data API v3"
                       >
-                        <span>YouTube Studio</span>
+                        <span>Auto-Upload Shorts</span>
                         <ExternalLink className="w-3 h-3" />
                       </button>
                     </div>
