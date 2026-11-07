@@ -142,7 +142,71 @@ export const App: React.FC = () => {
     await fetchStatus();
   };
 
-  const handleConnectToken = async (platform: string, token: string) => {
+    const handleLaunchTikTokBrowser = async () => {
+    try {
+      showNotification('Opening browser window... Please sign in to your TikTok account.');
+      await fetch('/api/channels/tiktok/login-browser', { method: 'POST' });
+    } catch (e) {
+      showNotification('Failed to launch browser login.');
+    }
+  };
+
+  const handleSaveTikTokCookies = async (cookiesStr: string) => {
+    if (!cookiesStr.trim()) return;
+    try {
+      const res = await fetch('/api/channels/tiktok/cookies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookies_json: cookiesStr })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification('TikTok cookies saved! Autonomous background publishing active.');
+        setTtToken('');
+        await fetchChannels();
+      } else {
+        showNotification(data.error || 'Failed to save cookies.');
+      }
+    } catch (e) {
+      showNotification('Error saving cookies.');
+    }
+  };
+
+  const handleSaveYouTubeToken = async (tokenStr: string) => {
+    if (!tokenStr.trim()) return;
+    try {
+      let res;
+      if (tokenStr.trim().startsWith('{')) {
+        res = await fetch('/api/channels/youtube/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token_json: tokenStr })
+        });
+      } else {
+        res = await fetch('/api/channels/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            platform: 'youtube',
+            access_token: tokenStr,
+            account_name: 'YouTube Shorts Creator'
+          })
+        });
+      }
+      const data = await res.json();
+      if (data.success !== false) {
+        showNotification('YouTube credentials saved! Autonomous Shorts publishing active.');
+        setYtToken('');
+        await fetchChannels();
+      } else {
+        showNotification(data.error || 'Failed to save YouTube token.');
+      }
+    } catch (e) {
+      showNotification('Error saving YouTube credentials.');
+    }
+  };
+
+const handleConnectToken = async (platform: string, token: string) => {
     if (!token.trim()) return;
     await fetch('/api/channels/connect', {
       method: 'POST',
@@ -327,11 +391,11 @@ export const App: React.FC = () => {
             <div className="p-4 bg-[#0a0a0a] border border-[#222222] rounded space-y-3 text-xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <span className="font-bold text-white block">TikTok Publishing</span>
+                  <span className="font-bold text-white block">TikTok Automated Publishing (Playwright Headless)</span>
                   <span className="text-[#777777]">
                     {channels.tiktok.connected
-                      ? `Headless OAuth API Active (@${channels.tiktok.account_name})`
-                      : 'You can publish 100% headlessly via API, or use the 1-Click Creator Studio button on any video below.'}
+                      ? `Active Session (@${channels.tiktok.account_name || 'TikTok Creator'}) — Videos will upload and post automatically.`
+                      : 'Playwright headless browser posts videos directly with captions and hashtags using your saved session.'}
                   </span>
                 </div>
                 {channels.tiktok.connected && (
@@ -339,26 +403,39 @@ export const App: React.FC = () => {
                     onClick={() => handleDisconnect('tiktok')}
                     className="text-[#666666] hover:text-white underline text-xs cursor-pointer self-start sm:self-auto"
                   >
-                    Disconnect Token
+                    Disconnect Session
                   </button>
                 )}
               </div>
 
               {!channels.tiktok.connected && (
-                <div className="pt-2 border-t border-[#1a1a1a] flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <input
-                    type="password"
-                    placeholder="Paste TikTok Access Token (for headless auto-posting)"
-                    value={ttToken}
-                    onChange={(e) => setTtToken(e.target.value)}
-                    className="bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white flex-1 font-mono"
-                  />
-                  <button
-                    onClick={() => handleConnectToken('tiktok', ttToken)}
-                    className="px-4 py-1.5 bg-white text-black font-semibold rounded text-xs hover:bg-[#eaeaea] cursor-pointer whitespace-nowrap"
-                  >
-                    Save Token
-                  </button>
+                <div className="pt-2 border-t border-[#1a1a1a] space-y-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <button
+                      onClick={handleLaunchTikTokBrowser}
+                      className="px-4 py-2 bg-white text-black font-semibold rounded text-xs hover:bg-[#eaeaea] cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Connect TikTok with Browser (1-Click Login)</span>
+                    </button>
+                    <span className="text-[#555] text-center sm:text-left">or paste cookies.json below:</span>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Paste cookies.json content or exported session..."
+                      value={ttToken}
+                      onChange={(e) => setTtToken(e.target.value)}
+                      className="bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white flex-1 font-mono"
+                    />
+                    <button
+                      onClick={() => handleSaveTikTokCookies(ttToken)}
+                      className="px-4 py-1.5 bg-[#222] text-white border border-[#333] hover:bg-[#333] rounded text-xs cursor-pointer whitespace-nowrap"
+                    >
+                      Save Cookies
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -369,11 +446,11 @@ export const App: React.FC = () => {
             <div className="p-4 bg-[#0a0a0a] border border-[#222222] rounded space-y-3 text-xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <span className="font-bold text-white block">YouTube Shorts Publishing</span>
+                  <span className="font-bold text-white block">YouTube Shorts Automated Publishing (Google API v3)</span>
                   <span className="text-[#777777]">
                     {channels.youtube.connected
-                      ? `Headless OAuth API Active (@${channels.youtube.account_name})`
-                      : 'You can publish headlessly via Google OAuth token, or use the 1-Click YouTube Studio button on any video below.'}
+                      ? `Active OAuth API (@${channels.youtube.account_name || 'YouTube Creator'}) — Videos will upload automatically with #Shorts.`
+                      : 'Uploads vertical videos under 60 seconds with #Shorts directly via YouTube Data API v3.'}
                   </span>
                 </div>
                 {channels.youtube.connected && (
@@ -390,13 +467,13 @@ export const App: React.FC = () => {
                 <div className="pt-2 border-t border-[#1a1a1a] flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <input
                     type="password"
-                    placeholder="Paste YouTube OAuth Access Token (for headless auto-posting)"
+                    placeholder="Paste youtube_token.json or OAuth Access Token..."
                     value={ytToken}
                     onChange={(e) => setYtToken(e.target.value)}
                     className="bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white flex-1 font-mono"
                   />
                   <button
-                    onClick={() => handleConnectToken('youtube', ytToken)}
+                    onClick={() => handleSaveYouTubeToken(ytToken)}
                     className="px-4 py-1.5 bg-white text-black font-semibold rounded text-xs hover:bg-[#eaeaea] cursor-pointer whitespace-nowrap"
                   >
                     Save Token

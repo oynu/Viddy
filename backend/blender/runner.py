@@ -344,12 +344,8 @@ class BlenderRunner:
         return "blender"
 
     def is_blender_available(self) -> bool:
-        """Checks if Blender binary can be called."""
-        try:
-            res = subprocess.run([self.blender_path, "--version"], capture_output=True, text=True, timeout=5)
-            return res.returncode == 0
-        except Exception:
-            return False
+        """Native generation active: Blender binary execution disabled per user mandate."""
+        return False
 
     def generate_blender_script(
         self,
@@ -466,8 +462,8 @@ class BlenderRunner:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL
             )
             
             for i in range(total_frames):
@@ -489,3 +485,24 @@ class BlenderRunner:
             pass
             
         return video_out
+
+    async def generate_titled_video_async(
+        self,
+        category: str,
+        title: str,
+        duration: float,
+        output_video_path: str,
+        timeout_seconds: float = 240.0
+    ) -> str:
+        """
+        Directly generates complete titled 1080x1920 30FPS 3D MP4 video using native Procedural3DVideoGenerator.
+        """
+        from backend.media.video_generator import Procedural3DVideoGenerator
+        gen = Procedural3DVideoGenerator()
+        return await gen.generate_titled_video_async(
+            category=category,
+            title=title,
+            duration=duration,
+            output_video_path=output_video_path,
+            timeout_seconds=timeout_seconds
+        )

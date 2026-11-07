@@ -351,58 +351,21 @@ class AutonomousWorker:
                     youtube_tags=",".join(script.youtube_tags)
                 )
                 
-        # 4. SCENE_PLAN
-        self.current_stage = PipelineStage.SCENE_PLAN
-        self.progress = 50.0
-        self.current_action = "Generating 3D low-poly scene breakdown & camera choreography..."
-        self._log("Visual Director: Planning 3D low-poly camera choreographies & lighting...", stage="VISUAL", level="INFO")
-        await self._emit_event("STAGE_CHANGE", {})
-        plan = self.visual_director.create_production_plan(concept, script)
-        self._log(f"Visual plan constructed: {len(plan.scenes)} cinematic low-poly 3D scenes scheduled.", stage="VISUAL", level="SUCCESS")
-        
-        # 5-7. RENDER, ASSEMBLE & QC (WITH AUTOMATED RETRY UP TO 2 TIMES)
+        # 4-7. AUDIO, 3D RENDER, ASSEMBLE & QC (WITH AUTOMATED RETRY UP TO 2 TIMES)
         max_attempts = 2
         for attempt in range(1, max_attempts + 1):
-            # 5. RENDER_3D
-            self.current_stage = PipelineStage.RENDER_3D
-            self.progress = 65.0
-            self.current_action = f"Rendering {len(plan.scenes)} low-poly 3D scenes (Attempt {attempt}/{max_attempts})..."
-            self._log(f"Starting 3D procedural rendering for {len(plan.scenes)} scenes (Attempt {attempt}/{max_attempts})...", stage="3D RENDER", level="INFO")
+            # 4. AUDIO SYNTHESIS & CADENCE
+            self.current_stage = PipelineStage.AUDIO_ASSEMBLY
+            self.progress = 55.0
+            self.current_action = f"Synthesizing voice narration and measuring cadence (Attempt {attempt}/{max_attempts})..."
+            self._log("Synthesizing neural voiceover via Edge-TTS and generating kinetic subtitles...", stage="AUDIO", level="INFO")
             await self._emit_event("STAGE_CHANGE", {"attempt": attempt})
             
-            rendered_clips = []
-            if self.simulated_media:
-                mock_clip = work_dir / f"scene_1_att{attempt}.mp4"
-                mock_clip.write_bytes(b"dummy clip data 1080x1920")
-                rendered_clips.append(str(mock_clip))
-            else:
-                for s_idx, scene in enumerate(plan.scenes):
-                    self._log(f"Rendering scene {s_idx + 1}/{len(plan.scenes)}: {scene.generator_type} with camera {scene.camera_motion}...", stage="3D RENDER", level="INFO")
-                    clip_path = await self.blender_runner.render_scene_async(
-                        scene=scene,
-                        output_dir=str(work_dir / f"scene_{scene.scene_id}"),
-                        output_video_name=f"scene_{scene.scene_id}.mp4",
-                        timeout_seconds=120.0
-                    )
-                    rendered_clips.append(clip_path)
-                    self.progress = 65.0 + ((s_idx + 1) / len(plan.scenes)) * 10.0
-                    await self._emit_event("RENDER_PROGRESS", {"scene_index": s_idx + 1, "total_scenes": len(plan.scenes)})
-
-            self._log(f"All {len(rendered_clips)} 3D low-poly scenes rendered successfully.", stage="3D RENDER", level="SUCCESS")
-
-            # 6. AUDIO & ASSEMBLY
-            self.current_stage = PipelineStage.AUDIO_ASSEMBLY
-            self.progress = 80.0
-            self.current_action = "Synthesizing voice narration, ASS vertical subtitles & audio muxing..."
-            self._log("Synthesizing neural voiceover via Edge-TTS and generating kinetic subtitles...", stage="AUDIO", level="INFO")
-            await self._emit_event("STAGE_CHANGE", {})
-            
-            narration_path = str(work_dir / f"narration_att{attempt}.mp3")
+            narration_path = str(work_dir / f"final_audio_att{attempt}.mp3")
             if self.simulated_media:
                 Path(narration_path).write_bytes(b"dummy audio")
                 actual_duration = 30.0
             else:
-                # Retrieve voice preference
                 voice = "en-US-ChristopherNeural"
                 if self.db_path:
                     with get_db(self.db_path) as session:
@@ -427,12 +390,32 @@ class AutonomousWorker:
                     total_duration=actual_duration,
                     output_ass_path=subtitles_path
                 )
-                
-            # Muxing Compositor
-            self.progress = 88.0
-            self.current_action = "Assembling master video (FFmpeg composition & subtitle burning)..."
-            self._log("FFmpeg Compositor: Muxing 3D clips + neural voiceover + burning 9:16 kinetic subtitles...", stage="COMPOSITE", level="INFO")
-            final_video_path = str(work_dir / "final_video.mp4")
+
+            # 5. TITLED 3D VIDEO GENERATION (NATIVE PYTHON + FFMPEG, NO BLENDER)
+            self.current_stage = PipelineStage.RENDER_3D
+            self.progress = 70.0
+            self.current_action = f"Rendering 1080x1920 30FPS 3D animation ({actual_duration:.1f}s, Attempt {attempt}/{max_attempts})..."
+            self._log(f"Rendering native 3D animation for '{concept.category}' matching {actual_duration:.1f}s...", stage="3D RENDER", level="INFO")
+            await self._emit_event("STAGE_CHANGE", {"attempt": attempt})
+            
+            titled_video_path = str(work_dir / f"titled_3d_att{attempt}.mp4")
+            if self.simulated_media:
+                Path(titled_video_path).write_bytes(b"dummy clip data 1080x1920")
+            else:
+                await self.blender_runner.generate_titled_video_async(
+                    category=concept.category,
+                    title=script.title,
+                    duration=actual_duration,
+                    output_video_path=titled_video_path,
+                    timeout_seconds=240.0
+                )
+            self._log("Native 3D animation rendered successfully.", stage="3D RENDER", level="SUCCESS")
+
+            # 6. MASTER SHORT ASSEMBLY
+            self.progress = 85.0
+            self.current_action = "Combining titled_3d.mp4 and final_audio.mp3 into final_short.mp4..."
+            self._log("FFmpeg Compositor: Combining titled_3d.mp4 and final_audio.mp3 with vertical kinetic subtitles...", stage="COMPOSITE", level="INFO")
+            final_video_path = str(work_dir / "final_short.mp4")
             thumbnail_path = str(work_dir / "thumbnail.jpg")
             
             if self.simulated_media:
@@ -440,8 +423,8 @@ class AutonomousWorker:
                 Path(thumbnail_path).write_bytes(b"dummy thumb")
             else:
                 await self.compositor.assemble_video_async(
-                    scene_clip_paths=rendered_clips,
-                    audio_path=narration_path,
+                    video_clips=[titled_video_path],
+                    narration_path=narration_path,
                     subtitles_path=subtitles_path,
                     output_path=final_video_path,
                     target_duration=actual_duration,

@@ -129,10 +129,12 @@ class PublishingManager:
                 ))
             elif platform == "tiktok":
                 token = await self.get_valid_token("tiktok")
-                caption = req.tiktok_caption or f"{req.title} {' '.join(req.tags[:4])}"
+                base_caption = req.tiktok_caption or req.title
+                tags_str = req.tiktok_hashtags or " ".join(req.tags[:8])
+                full_caption = f"{base_caption}\n\n{tags_str}".strip()
                 res = await self.tiktok_pub.publish_video(
                     video_path=req.video_path,
-                    caption=caption,
+                    caption=full_caption,
                     access_token=token,
                     comment_text=req.tiktok_commentary
                 )

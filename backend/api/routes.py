@@ -215,26 +215,68 @@ def get_video_detail(video_id: int):
         }
 
 # Platform Accounts & Connections
+class TikTokCookiesPayload(BaseModel):
+    cookies_json: str
+
+class YouTubeTokenPayload(BaseModel):
+    token_json: str
+
 @router.get("/channels")
 def get_channels():
+    import json
+    from backend.publishing.tiktok_auth import has_saved_tiktok_cookies, TIKTOK_COOKIES_PATH
+    from backend.publishing.youtube_publisher import YOUTUBE_TOKEN_PATH
     with get_db() as session:
         yt = crud.get_platform_account(session, "youtube")
         tt = crud.get_platform_account(session, "tiktok")
         
+        tt_connected = has_saved_tiktok_cookies() or (tt.is_connected if tt else False)
+        yt_connected = YOUTUBE_TOKEN_PATH.exists() or (yt.is_connected if yt else False)
+        
         return {
             "youtube": {
-                "connected": yt.is_connected if yt else False,
-                "account_name": yt.account_name if yt else None,
+                "connected": yt_connected,
+                "account_name": yt.account_name if yt and yt.account_name else ("YouTube Shorts (OAuth Active)" if YOUTUBE_TOKEN_PATH.exists() else None),
                 "channel_id": yt.channel_id if yt else None,
                 "token_expiry": yt.token_expiry.isoformat() if yt and yt.token_expiry else None
             },
             "tiktok": {
-                "connected": tt.is_connected if tt else False,
-                "account_name": tt.account_name if tt else None,
+                "connected": tt_connected,
+                "account_name": tt.account_name if tt and tt.account_name else ("TikTok (cookies.json Active)" if has_saved_tiktok_cookies() else None),
                 "channel_id": tt.channel_id if tt else None,
                 "token_expiry": tt.token_expiry.isoformat() if tt and tt.token_expiry else None
             }
         }
+
+@router.post("/channels/tiktok/cookies")
+def save_tiktok_cookies_route(payload: TikTokCookiesPayload):
+    from backend.publishing.tiktok_auth import save_pasted_cookies
+    res = save_pasted_cookies(payload.cookies_json)
+    if res.get("success"):
+        with get_db() as session:
+            crud.upsert_platform_account(session, "tiktok", is_connected=True, account_name="TikTok Account (cookies.json)")
+    return res
+
+@router.post("/channels/tiktok/login-browser")
+async def trigger_tiktok_browser_login():
+    from backend.publishing.tiktok_auth import launch_interactive_tiktok_login
+    asyncio.create_task(launch_interactive_tiktok_login(headless=False))
+    return {"message": "TikTok login window launched. Please sign in on the browser window to save your session."}
+
+@router.post("/channels/youtube/token")
+def save_youtube_token_route(payload: YouTubeTokenPayload):
+    import json
+    from backend.publishing.youtube_publisher import YOUTUBE_TOKEN_PATH
+    try:
+        data = json.loads(payload.token_json.strip())
+        YOUTUBE_TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(YOUTUBE_TOKEN_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        with get_db() as session:
+            crud.upsert_platform_account(session, "youtube", is_connected=True, account_name="YouTube Shorts (OAuth Active)")
+        return {"success": True, "message": "YouTube token saved successfully."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @router.post("/channels/connect")
 def connect_channel(req: PlatformConnectRequest):

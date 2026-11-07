@@ -92,54 +92,37 @@ class ScriptwritingAgent:
         title_clean = concept.title.replace(' happened tomorrow?', '').rstrip('?')
         topic_subject = title_clean.replace('What if ', '').replace('How does ', '').replace('Why does ', '')
 
-        # 1. Cinematic Visceral Opening Hook
+        # 1. Cinematic Visceral Opening Hook (Punchy ~18 words)
         if concept.hook_angle:
-            hook = f"Picture this: {concept.hook_angle}. If {topic_subject.lower()} occurred right now, the universe as you know it would shatter."
+            hook = f"Picture this: {concept.hook_angle}. If {topic_subject.lower()} happened right now, reality would shatter."
         elif "what if" in concept.title.lower():
-            hook = f"What if you woke up tomorrow and {topic_subject.lower()}? Before your brain could even process what was happening, the laws of physics would retaliate."
+            hook = f"What if {topic_subject.lower()} occurred right now? Before your brain could process it, physics would retaliate."
         else:
-            hook = f"Have you ever wondered how {topic_subject.lower()} actually works? The scientific reality is far more extreme than most people realize."
+            hook = f"Have you ever wondered how {topic_subject.lower()} actually works? The reality is far more extreme than you think."
 
         blocks = [hook]
 
-        # 2. Immediate Consequence / Real-world stakes
+        # 2. Immediate Consequence / Science Fact (~22 words)
         if len(concept.key_facts) > 0:
-            fact_1 = concept.key_facts[0]
-            blocks.append(
-                f"Within the very first seconds, {fact_1.lower().rstrip('.')}. "
-                f"Every calculation scientists have ever relied on would instantly collapse into total chaos."
-            )
+            fact_1 = concept.key_facts[0].rstrip('.')
+            blocks.append(f"Within seconds, {fact_1.lower()}. Every calculation scientists rely on collapses into chaos.")
         else:
-            blocks.append(
-                f"Within seconds, equilibrium vanishes. The fundamental forces that hold matter together begin cascading out of control."
-            )
+            blocks.append("Within seconds, equilibrium vanishes as the fundamental forces of matter cascade out of control.")
 
-        # 3. Scientific Deep-Dive (The Mechanism)
+        # 3. Scientific Deep-Dive Mechanism (~25 words)
         if len(concept.key_facts) > 1:
-            fact_2 = concept.key_facts[1]
-            blocks.append(
-                f"Here is the mind-bending scientific reason why: {fact_2.rstrip('.')}. "
-                f"This isn't theoretical speculation—it is governed by strict mathematical conservation laws."
-            )
+            fact_2 = concept.key_facts[1].rstrip('.')
+            blocks.append(f"Here is why: {fact_2}. This isn't speculation—it is governed by absolute conservation laws.")
         else:
-            blocks.append(
-                f"Why does this happen? Because when energy gradients shift, thermodynamic entropy forces an instantaneous reallocation of mass and velocity."
-            )
+            blocks.append("Why? Because thermodynamic entropy instantly forces a violent reallocation of mass and energy.")
 
-        # 4. Mind-Blowing Escalation / Hidden Truth
+        # 4. Mind-Blowing Escalation / Hidden Truth (~20 words)
         if len(concept.key_facts) > 2:
-            fact_3 = concept.key_facts[2]
-            blocks.append(
-                f"Even more astonishing, {fact_3.lower().rstrip('.')}. "
-                f"This proves that our baseline reality is balanced on an impossibly fragile cosmic razor's edge."
-            )
-        else:
-            blocks.append(
-                f"Even crazier: if this state persisted for just twenty-four hours, the cascading planetary effects would become completely irreversible."
-            )
+            fact_3 = concept.key_facts[2].rstrip('.')
+            blocks.append(f"Even crazier, {fact_3.lower()}. Our existence balances on an impossibly fragile cosmic edge.")
 
-        # 5. High-Converting Engaging Call-to-Action
-        cta = "Which cosmic mystery should Viddy simulate next? Drop your craziest theories in the comments and follow for daily mind-bending science!"
+        # 5. Punchy Call-to-Action (~12 words)
+        cta = "What mind-bending question should Viddy explain next? Drop it below and follow for daily science!"
         blocks.append(cta)
 
         full_text = " ".join(blocks)
