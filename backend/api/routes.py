@@ -422,6 +422,54 @@ def auto_generate_all_metadata_endpoint():
         session.commit()
         return {"success": True, "count": updated_count, "message": f"Updated metadata for {updated_count} videos"}
 
+class BatchPublishRequest(BaseModel):
+    video_ids: Optional[List[int]] = None
+    destination: Optional[str] = None
+
+@router.get("/queue/status")
+def get_publish_queue_status_endpoint():
+    from backend.publishing.publish_queue import get_publish_queue
+    queue = get_publish_queue()
+    return queue.get_status()
+
+@router.post("/queue/publish-all")
+def start_batch_publishing_endpoint(req: Optional[BatchPublishRequest] = None):
+    from backend.publishing.publish_queue import get_publish_queue
+    queue = get_publish_queue()
+    dest = (req.destination if req and req.destination else "tiktok").lower()
+    
+    with get_db() as session:
+        if req and req.video_ids:
+            v_ids = req.video_ids
+        else:
+            vids = session.query(VideoModel).filter(VideoModel.status.in_(["ready", "queued", "pending", "failed"])).all()
+            v_ids = [v.id for v in vids]
+            
+    enqueued = queue.enqueue_db_videos(v_ids, destination=dest)
+    queue.start()
+    return {
+        "success": True,
+        "enqueued_count": enqueued,
+        "destination": dest,
+        "message": f"Started publishing {enqueued} videos to {dest.upper()}."
+    }
+
+@router.post("/queue/stop")
+def stop_batch_publishing_endpoint():
+    from backend.publishing.publish_queue import get_publish_queue
+    queue = get_publish_queue()
+    queue.stop()
+    return {"success": True, "message": "Batch publishing queue stopped."}
+
+@router.post("/videos/{video_id}/publish")
+def publish_single_video_queue_endpoint(video_id: int, req: Optional[BatchPublishRequest] = None):
+    from backend.publishing.publish_queue import get_publish_queue
+    queue = get_publish_queue()
+    dest = (req.destination if req and req.destination else "tiktok").lower()
+    enqueued = queue.enqueue_db_videos([video_id], destination=dest)
+    queue.start()
+    return {"success": True, "message": f"Video {video_id} enqueued for publishing to {dest}."}
+
 # Platform Accounts & Connections
 class TikTokCookiesPayload(BaseModel):
     cookies_json: str
