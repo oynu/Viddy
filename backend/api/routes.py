@@ -374,6 +374,54 @@ def update_video_endpoint(video_id: int, req: VideoUpdateRequest):
         session.commit()
         return {"success": True, "message": f"Video {video_id} updated"}
 
+class MetadataGenRequest(BaseModel):
+    prompt: Optional[str] = None
+
+@router.post("/videos/{video_id}/auto-metadata")
+def auto_generate_video_metadata_endpoint(video_id: int, req: Optional[MetadataGenRequest] = None):
+    from backend.publishing.metadata_generator import generate_smart_metadata
+    with get_db() as session:
+        v = crud.get_video_by_id(session, video_id)
+        if not v:
+            raise HTTPException(status_code=404, detail="Video not found")
+        prompt = req.prompt if req else None
+        meta = generate_smart_metadata(raw_title=v.title, prompt=prompt)
+        v.title = meta["title"]
+        v.tiktok_hashtags = meta["tiktok_hashtags"]
+        v.tiktok_commentary = meta["tiktok_commentary"]
+        v.youtube_tags = meta["youtube_tags"]
+        v.script = meta["youtube_description"]
+        session.commit()
+        return {
+            "success": True,
+            "message": "Metadata generated successfully",
+            "video": {
+                "id": v.id,
+                "title": v.title,
+                "tiktok_hashtags": v.tiktok_hashtags,
+                "tiktok_commentary": v.tiktok_commentary,
+                "youtube_tags": v.youtube_tags,
+                "script": v.script
+            }
+        }
+
+@router.post("/videos/auto-metadata-all")
+def auto_generate_all_metadata_endpoint():
+    from backend.publishing.metadata_generator import generate_smart_metadata
+    with get_db() as session:
+        videos = session.query(VideoModel).filter(VideoModel.status.in_(["ready", "queued", "pending"])).all()
+        updated_count = 0
+        for v in videos:
+            meta = generate_smart_metadata(raw_title=v.title)
+            v.title = meta["title"]
+            v.tiktok_hashtags = meta["tiktok_hashtags"]
+            v.tiktok_commentary = meta["tiktok_commentary"]
+            v.youtube_tags = meta["youtube_tags"]
+            v.script = meta["youtube_description"]
+            updated_count += 1
+        session.commit()
+        return {"success": True, "count": updated_count, "message": f"Updated metadata for {updated_count} videos"}
+
 # Platform Accounts & Connections
 class TikTokCookiesPayload(BaseModel):
     cookies_json: str
