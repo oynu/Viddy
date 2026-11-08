@@ -1,6 +1,6 @@
 import os
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -261,6 +261,118 @@ async def auto_publish_video_endpoint(video_id: int, req: Optional[AutoPublishRe
             errors = [r.error_message for r in results if r.error_message]
             err_msg = "; ".join(errors) if errors else "Publishing failed. Check channel credentials."
             return {"success": False, "message": err_msg, "results": [r.model_dump(mode='json') for r in results]}
+
+class VideoUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    script: Optional[str] = None
+    tiktok_hashtags: Optional[str] = None
+    tiktok_commentary: Optional[str] = None
+    youtube_tags: Optional[str] = None
+
+@router.post("/videos/upload")
+async def upload_videos_endpoint(
+    files: List[UploadFile] = File(...),
+    destination: str = Form("tiktok")
+):
+    from pathlib import Path
+    import uuid
+    import re
+    from backend.config import settings
+    from backend.publishing.video_prober import probe_video_metadata, generate_video_thumbnail
+
+    upload_dir = settings.base_dir / "output" / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    created_videos = []
+
+    with get_db() as session:
+        for f in files:
+            orig_filename = f.filename or "video.mp4"
+            clean_stem = Path(orig_filename).stem
+            clean_title = re.sub(r"[_\-\.]+", " ", clean_stem).strip().title()
+            if not clean_title:
+                clean_title = "Uploaded Short Video"
+
+            unique_id = uuid.uuid4().hex[:8]
+            safe_filename = f"{unique_id}_{Path(orig_filename).name}"
+            saved_path = upload_dir / safe_filename
+            thumb_path = upload_dir / f"{unique_id}_thumb.jpg"
+
+            with open(saved_path, "wb") as buffer:
+                while chunk := await f.read(1024 * 1024):
+                    buffer.write(chunk)
+
+            meta = probe_video_metadata(str(saved_path))
+            generate_video_thumbnail(str(saved_path), str(thumb_path))
+
+            default_hashtags = "#fyp #foryou #viral #trending #shorts #creator"
+            default_commentary = "What did you think about this? Drop your thoughts below! 👇"
+
+            video = crud.create_video(
+                session=session,
+                title=clean_title,
+                topic="Uploaded",
+                category="custom",
+                script=clean_title,
+                hook=clean_title,
+                status="ready"
+            )
+            video.video_path = str(saved_path.resolve())
+            video.thumbnail_path = str(thumb_path.resolve()) if thumb_path.exists() else None
+            video.duration = meta.get("duration", 0.0)
+            video.tiktok_hashtags = default_hashtags
+            video.tiktok_commentary = default_commentary
+            video.youtube_tags = "shorts,viral,trending,custom"
+            session.commit()
+
+            created_videos.append({
+                "id": video.id,
+                "title": video.title,
+                "duration": video.duration,
+                "status": video.status,
+                "video_path": video.video_path,
+                "thumbnail_path": video.thumbnail_path,
+                "tiktok_hashtags": video.tiktok_hashtags,
+                "tiktok_commentary": video.tiktok_commentary,
+                "created_at": video.created_at.isoformat() if video.created_at else None
+            })
+
+    return {"success": True, "count": len(created_videos), "videos": created_videos}
+
+@router.delete("/videos/{video_id}")
+def delete_video_endpoint(video_id: int):
+    with get_db() as session:
+        v = crud.get_video_by_id(session, video_id)
+        if not v:
+            raise HTTPException(status_code=404, detail="Video not found")
+        try:
+            if v.video_path and os.path.exists(v.video_path) and "output/uploads" in v.video_path.replace("\\", "/"):
+                os.remove(v.video_path)
+            if v.thumbnail_path and os.path.exists(v.thumbnail_path):
+                os.remove(v.thumbnail_path)
+        except Exception:
+            pass
+        session.delete(v)
+        session.commit()
+        return {"success": True, "message": f"Video {video_id} deleted"}
+
+@router.patch("/videos/{video_id}")
+def update_video_endpoint(video_id: int, req: VideoUpdateRequest):
+    with get_db() as session:
+        v = crud.get_video_by_id(session, video_id)
+        if not v:
+            raise HTTPException(status_code=404, detail="Video not found")
+        if req.title is not None:
+            v.title = req.title
+        if req.script is not None:
+            v.script = req.script
+        if req.tiktok_hashtags is not None:
+            v.tiktok_hashtags = req.tiktok_hashtags
+        if req.tiktok_commentary is not None:
+            v.tiktok_commentary = req.tiktok_commentary
+        if req.youtube_tags is not None:
+            v.youtube_tags = req.youtube_tags
+        session.commit()
+        return {"success": True, "message": f"Video {video_id} updated"}
 
 # Platform Accounts & Connections
 class TikTokCookiesPayload(BaseModel):
