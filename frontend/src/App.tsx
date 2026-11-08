@@ -1,170 +1,202 @@
-import React, { useState, useEffect } from 'react';
-import { Play, Pause, Square, Copy, Check, ExternalLink, RefreshCw, Download, UploadCloud, MessageSquareQuote, Hash } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  UploadCloud,
+  Check,
+  ExternalLink,
+  RefreshCw,
+  Copy,
+  Hash,
+  MessageSquareQuote,
+  Trash2,
+  Sparkles,
+  Film,
+  ArrowUpRight,
+  AlertCircle,
+  Loader2,
+  Square,
+  Play
+} from 'lucide-react';
 
 export const App: React.FC = () => {
-  const [agentStatus, setAgentStatus] = useState<any>({
-    state: 'STOPPED',
-    stage: 'IDLE',
-    progress: 0,
-    current_action: 'Studio ready.',
-    settings: {
-      publish_destination: 'local',
-      running_mode: 'continuous'
-    }
-  });
-
   const [videos, setVideos] = useState<any[]>([]);
   const [channels, setChannels] = useState<any>({
     youtube: { connected: false },
     tiktok: { connected: false }
   });
-  const [loading, setLoading] = useState(false);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [notification, setNotification] = useState<string | null>(null);
+  const [queueStatus, setQueueStatus] = useState<any>({
+    is_running: false,
+    queued_count: 0,
+    completed_count: 0,
+    failed_count: 0,
+    active_item: null
+  });
 
-  // Direct token inputs for automated API publishing
-  const [ytToken, setYtToken] = useState('');
-  const [ttToken, setTtToken] = useState('');
+  const [destination, setDestination] = useState<'tiktok' | 'youtube' | 'both'>('tiktok');
+  const [autoPublishOnDrop, setAutoPublishOnDrop] = useState<boolean>(true);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [notification, setNotification] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Platform connect inputs
+  const [showChannelsModal, setShowChannelsModal] = useState<boolean>(false);
+  const [ytToken, setYtToken] = useState<string>('');
+  const [ttCookies, setTtCookies] = useState<string>('');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showNotification = (msg: string) => {
     setNotification(msg);
-    setTimeout(() => setNotification(null), 3500);
-  };
-
-  const fetchStatus = async () => {
-    try {
-      const res = await fetch('/api/agent/status');
-      if (res.ok) setAgentStatus(await res.json());
-    } catch (e) {}
+    setTimeout(() => setNotification(null), 4000);
   };
 
   const fetchVideos = async () => {
     try {
       const res = await fetch('/api/videos');
       if (res.ok) setVideos(await res.json());
-    } catch (e) {}
+    } catch (_) {}
   };
 
   const fetchChannels = async () => {
     try {
       const res = await fetch('/api/channels');
       if (res.ok) setChannels(await res.json());
-    } catch (e) {}
+    } catch (_) {}
+  };
+
+  const fetchQueueStatus = async () => {
+    try {
+      const res = await fetch('/api/queue/status');
+      if (res.ok) setQueueStatus(await res.json());
+    } catch (_) {}
   };
 
   useEffect(() => {
-    let ws: WebSocket | null = null;
-    let reconnectTimeout: any = null;
-
-    const connectWebSocket = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/events`;
-      ws = new WebSocket(wsUrl);
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'INITIAL_STATE' && msg.data) {
-            setAgentStatus(msg.data);
-          } else if (msg.state) {
-            setAgentStatus((prev: any) => ({
-              ...prev,
-              state: msg.state,
-              stage: msg.stage,
-              progress: msg.progress ?? prev.progress,
-              current_action: msg.current_action ?? prev.current_action
-            }));
-            if (msg.type === 'VIDEO_COMPLETED') {
-              fetchVideos();
-              fetchStatus();
-            }
-          }
-        } catch (err) {}
-      };
-
-      ws.onclose = () => {
-        reconnectTimeout = setTimeout(connectWebSocket, 3000);
-      };
-      ws.onerror = () => ws?.close();
-    };
-
-    connectWebSocket();
-    fetchStatus();
     fetchVideos();
     fetchChannels();
+    fetchQueueStatus();
 
     const interval = setInterval(() => {
-      fetchStatus();
       fetchVideos();
-    }, 4000);
+      fetchQueueStatus();
+    }, 3000);
 
-    return () => {
-      if (ws) ws.close();
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, []);
 
-  const handleStart = async () => {
-    setLoading(true);
-    await fetch('/api/agent/start', { method: 'POST' });
-    await fetchStatus();
-    setLoading(false);
-  };
+  const handleFileUpload = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
 
-  const handlePause = async () => {
-    setLoading(true);
-    await fetch('/api/agent/pause', { method: 'POST' });
-    await fetchStatus();
-    setLoading(false);
-  };
+    setIsUploading(true);
+    showNotification(`Importing ${fileList.length} video(s)... Extracting scripts & crafting viral captions...`);
 
-  const handleResume = async () => {
-    setLoading(true);
-    await fetch('/api/agent/resume', { method: 'POST' });
-    await fetchStatus();
-    setLoading(false);
-  };
+    const formData = new FormData();
+    for (let i = 0; i < fileList.length; i++) {
+      formData.append('files', fileList[i]);
+    }
+    formData.append('destination', destination);
+    formData.append('auto_publish', autoPublishOnDrop ? 'true' : 'false');
 
-  const handleStop = async () => {
-    setLoading(true);
-    await fetch('/api/agent/stop', { method: 'POST' });
-    await fetchStatus();
-    setLoading(false);
-  };
-
-  const handleSetDestination = async (dest: string) => {
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publish_destination: dest })
-    });
-    await fetchStatus();
-  };
-
-      const handleAutoPublish = async (videoId: number, platform: string = 'tiktok') => {
     try {
-      showNotification(`Initiating automated background upload to ${platform.toUpperCase()} via Playwright...`);
-      const res = await fetch(`/api/videos/${videoId}/auto-publish`, {
+      const res = await fetch('/api/videos/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destination: platform })
+        body: formData
       });
       const data = await res.json();
       if (data.success) {
-        showNotification(`✓ Video successfully published to ${platform.toUpperCase()}!`);
+        if (autoPublishOnDrop) {
+          showNotification(`🚀 ${data.count} video(s) imported & auto-publishing to ${destination.toUpperCase()} now!`);
+        } else {
+          showNotification(`✓ ${data.count} video(s) ready with viral captions & reach hashtags!`);
+        }
         await fetchVideos();
+        await fetchQueueStatus();
       } else {
-        showNotification(`Publishing status: ${data.message}`);
+        showNotification(data.message || 'Upload failed.');
       }
-    } catch (e) {
-      showNotification('Publishing request failed.');
+    } catch (e: any) {
+      showNotification('Error uploading videos: ' + e.message);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-const handleLaunchTikTokBrowser = async () => {
+  const handlePublishAll = async () => {
     try {
-      showNotification('Opening Brave Browser window... Please sign in to your TikTok account.');
+      const res = await fetch('/api/queue/publish-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification(`Started auto-publishing ${data.enqueued_count} videos to ${destination.toUpperCase()} via Brave!`);
+        await fetchQueueStatus();
+        await fetchVideos();
+      }
+    } catch (e) {
+      showNotification('Failed to start publishing queue.');
+    }
+  };
+
+  const handleStopQueue = async () => {
+    try {
+      await fetch('/api/queue/stop', { method: 'POST' });
+      showNotification('Publishing queue stopped.');
+      await fetchQueueStatus();
+    } catch (e) {
+      showNotification('Failed to stop queue.');
+    }
+  };
+
+  const handlePublishSingle = async (videoId: number) => {
+    try {
+      const res = await fetch(`/api/videos/${videoId}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification(`Publishing video to ${destination.toUpperCase()} via Brave...`);
+        await fetchQueueStatus();
+        await fetchVideos();
+      }
+    } catch (e) {
+      showNotification('Failed to publish video.');
+    }
+  };
+
+  const handleRegenerateMetadata = async (videoId: number) => {
+    try {
+      showNotification('Generating viral hook, hashtags and comment...');
+      const res = await fetch(`/api/videos/${videoId}/auto-metadata`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        showNotification('Viral caption & hashtags generated!');
+        await fetchVideos();
+      }
+    } catch (e) {
+      showNotification('Failed to generate metadata.');
+    }
+  };
+
+  const handleDeleteVideo = async (videoId: number) => {
+    try {
+      const res = await fetch(`/api/videos/${videoId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setVideos(prev => prev.filter(v => v.id !== videoId));
+        showNotification('Video removed from queue.');
+      }
+    } catch (e) {
+      showNotification('Failed to delete video.');
+    }
+  };
+
+  const handleLaunchBraveTikTok = async () => {
+    try {
+      showNotification('Launching Brave Browser... Sign in to TikTok Studio to save session.');
       await fetch('/api/channels/tiktok/login-browser', { method: 'POST' });
       const pollTimer = setInterval(async () => {
         try {
@@ -172,94 +204,42 @@ const handleLaunchTikTokBrowser = async () => {
           const data = await res.json();
           if (data?.tiktok?.connected) {
             setChannels(data);
-            showNotification('TikTok Brave session connected and verified!');
+            showNotification('✓ TikTok Brave session connected and verified!');
             clearInterval(pollTimer);
           }
         } catch (_) {}
       }, 3000);
       setTimeout(() => clearInterval(pollTimer), 120000);
     } catch (e) {
-      showNotification('Failed to launch browser login.');
+      showNotification('Failed to launch Brave browser login.');
     }
   };
 
-  const handleSaveTikTokCookies = async (cookiesStr: string) => {
-    if (!cookiesStr.trim()) return;
+  const handleSaveYouTubeToken = async () => {
+    if (!ytToken.trim()) return;
     try {
-      const res = await fetch('/api/channels/tiktok/cookies', {
+      const res = await fetch('/api/channels/youtube/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cookies_json: cookiesStr })
+        body: JSON.stringify({ token_json: ytToken.trim() })
       });
       const data = await res.json();
       if (data.success) {
-        showNotification('TikTok cookies saved! Autonomous background publishing active.');
-        setTtToken('');
-        await fetchChannels();
-      } else {
-        showNotification(data.error || 'Failed to save cookies.');
-      }
-    } catch (e) {
-      showNotification('Error saving cookies.');
-    }
-  };
-
-  const handleSaveYouTubeToken = async (tokenStr: string) => {
-    if (!tokenStr.trim()) return;
-    try {
-      let res;
-      if (tokenStr.trim().startsWith('{')) {
-        res = await fetch('/api/channels/youtube/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token_json: tokenStr })
-        });
-      } else {
-        res = await fetch('/api/channels/connect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            platform: 'youtube',
-            access_token: tokenStr,
-            account_name: 'YouTube Shorts Creator'
-          })
-        });
-      }
-      const data = await res.json();
-      if (data.success !== false) {
-        showNotification('YouTube credentials saved! Autonomous Shorts publishing active.');
+        showNotification('✓ YouTube Shorts API connected!');
         setYtToken('');
         await fetchChannels();
       } else {
-        showNotification(data.error || 'Failed to save YouTube token.');
+        showNotification(data.error || 'Failed to save token.');
       }
     } catch (e) {
-      showNotification('Error saving YouTube credentials.');
+      showNotification('Error saving YouTube token.');
     }
-  };
-
-const handleConnectToken = async (platform: string, token: string) => {
-    if (!token.trim()) return;
-    await fetch('/api/channels/connect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        platform,
-        access_token: token.trim(),
-        account_name: `${platform.toUpperCase()} API Linked`
-      })
-    });
-    if (platform === 'youtube') setYtToken('');
-    if (platform === 'tiktok') setTtToken('');
-    await fetchChannels();
-    await fetchStatus();
-    showNotification(`Connected ${platform} API credentials for direct autonomous publishing.`);
   };
 
   const handleDisconnect = async (platform: string) => {
     await fetch(`/api/channels/disconnect?platform=${platform}`, { method: 'POST' });
     await fetchChannels();
-    await fetchStatus();
+    showNotification(`Disconnected ${platform}.`);
   };
 
   const copyToClipboard = (text: string, key: string) => {
@@ -268,340 +248,373 @@ const handleConnectToken = async (platform: string, token: string) => {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const openTikTokUpload = (video: any) => {
-    const fullCaption = `${video.title} 🤯 Science breakdown you didn't know!\n\n${video.tiktok_hashtags || '#fyp #foryou #learnontiktok #stemtok'}`;
-    navigator.clipboard.writeText(fullCaption);
-    showNotification('TikTok caption & reach hashtags copied to clipboard! Opening TikTok Creator Center...');
-    window.open('https://www.tiktok.com/creator-center/upload', '_blank');
-  };
-
-  const openYouTubeUpload = (video: any) => {
-    const fullDesc = `${video.title}\n\n${video.script}\n\nProduced autonomously by Viddy AI Video Studio.\n\n${video.tiktok_hashtags || ''}`;
-    navigator.clipboard.writeText(fullDesc);
-    showNotification('YouTube description & tags copied to clipboard! Opening YouTube Studio...');
-    window.open('https://studio.youtube.com/channel/upload?d=pt', '_blank');
-  };
-
-  const isRunning = agentStatus.state === 'RUNNING';
-  const isPaused = agentStatus.state === 'PAUSED';
-  const currentDest = agentStatus.settings?.publish_destination || 'local';
+  const readyVideosCount = videos.filter(v => v.status === 'ready' || v.status === 'queued' || v.status === 'failed').length;
 
   return (
     <div className="min-h-screen bg-black text-white selection:bg-white selection:text-black font-sans antialiased">
       {/* Toast Notification */}
       {notification && (
-        <div className="fixed top-5 right-5 z-50 bg-white text-black px-4 py-2.5 rounded shadow-xl text-xs font-mono flex items-center gap-2">
+        <div className="fixed top-5 right-5 z-50 bg-white text-black px-4 py-2.5 rounded shadow-2xl text-xs font-mono flex items-center gap-2">
           <Check className="w-4 h-4 text-black" />
           <span>{notification}</span>
         </div>
       )}
 
-      {/* Minimal Header */}
-      <header className="border-b border-[#1f1f1f] px-6 py-4 flex items-center justify-between">
+      {/* Top Header */}
+      <header className="border-b border-[#1f1f1f] px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="font-mono text-sm tracking-widest font-black uppercase">VIDDY</span>
-          <span className="text-xs text-[#666666]">/</span>
-          <span className="text-xs text-[#888888] font-medium tracking-tight">Autonomous 24/7 AI Studio</span>
+          <span className="font-mono text-base tracking-widest font-black uppercase">VIDDY</span>
+          <span className="text-xs text-[#555] font-mono">/</span>
+          <span className="text-xs text-[#999] font-medium tracking-tight">Bulk Video Auto-Publisher</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-white animate-pulse' : 'bg-[#444444]'}`} />
-          <span className="text-xs text-[#888888] font-mono uppercase">{isRunning ? 'Running' : isPaused ? 'Paused' : 'Idle'}</span>
+
+        {/* Platform Connection Status Pills */}
+        <div className="flex items-center gap-2.5">
+          {/* TikTok Pill */}
+          <button
+            onClick={channels.tiktok?.connected ? () => setShowChannelsModal(true) : handleLaunchBraveTikTok}
+            className={`px-3 py-1.5 rounded text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer border ${
+              channels.tiktok?.connected
+                ? 'bg-[#111] text-white border-[#333] hover:border-white'
+                : 'bg-white text-black font-semibold border-white hover:bg-[#eaeaea]'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${channels.tiktok?.connected ? 'bg-white' : 'bg-black'}`} />
+            <span>{channels.tiktok?.connected ? 'TikTok (Brave Active)' : 'Connect TikTok in Brave'}</span>
+          </button>
+
+          {/* YouTube Shorts Pill */}
+          <button
+            onClick={() => setShowChannelsModal(true)}
+            className={`px-3 py-1.5 rounded text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer border ${
+              channels.youtube?.connected
+                ? 'bg-[#111] text-white border-[#333] hover:border-white'
+                : 'bg-[#161616] text-[#888] border-[#2a2a2a] hover:text-white'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${channels.youtube?.connected ? 'bg-white' : 'bg-[#555]'}`} />
+            <span>{channels.youtube?.connected ? 'YouTube Shorts (Active)' : 'Connect YouTube'}</span>
+          </button>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-4xl mx-auto px-6 py-10 space-y-12">
-        {/* Core Controls */}
-        <section className="border border-[#222222] bg-[#0a0a0a] rounded-lg p-6 space-y-6">
+      {/* Main Studio Container */}
+      <main className="max-w-4xl mx-auto px-6 py-10 space-y-10">
+        
+        {/* Drop & Import Zone */}
+        <section
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragging(false);
+            handleFileUpload(e.dataTransfer.files);
+          }}
+          className={`border-2 border-dashed rounded-xl p-10 text-center transition-all cursor-pointer ${
+            isDragging
+              ? 'border-white bg-[#141414]'
+              : 'border-[#262626] bg-[#0a0a0a] hover:border-[#444] hover:bg-[#0f0f0f]'
+          }`}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="video/mp4,video/quicktime,video/webm,video/*"
+            className="hidden"
+            onChange={(e) => handleFileUpload(e.target.files)}
+          />
+
+          <div className="flex flex-col items-center justify-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-[#161616] border border-[#2a2a2a] flex items-center justify-center">
+              {isUploading ? (
+                <Loader2 className="w-6 h-6 text-white animate-spin" />
+              ) : (
+                <UploadCloud className="w-6 h-6 text-white" />
+              )}
+            </div>
+
+            <div>
+              <h2 className="text-base font-bold text-white tracking-tight">
+                {isUploading ? 'Analyzing scripts & crafting captions...' : 'Drop video files here or click to import'}
+              </h2>
+              <p className="text-xs text-[#777] mt-1 max-w-md mx-auto">
+                Imports multiple videos, transcribes the spoken script, generates viral hooks, reach hashtags, and posts automatically via Brave.
+              </p>
+            </div>
+
+            {/* Quick Auto-Publish Toggle */}
+            <div
+              className="inline-flex items-center gap-2 pt-2 text-xs font-mono text-[#aaa]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                id="autoDropToggle"
+                checked={autoPublishOnDrop}
+                onChange={(e) => setAutoPublishOnDrop(e.target.checked)}
+                className="w-4 h-4 rounded bg-black border-[#444] text-white focus:ring-0 cursor-pointer"
+              />
+              <label htmlFor="autoDropToggle" className="cursor-pointer select-none">
+                ⚡ Auto-publish immediately upon drop (No extra clicks needed)
+              </label>
+            </div>
+          </div>
+        </section>
+
+        {/* Batch Queue & Destination Controls */}
+        <section className="bg-[#0a0a0a] border border-[#222] rounded-xl p-6 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="text-xs font-mono uppercase text-[#777777] mb-1">Status</div>
-              <div className="text-2xl font-bold tracking-tight">
-                {isRunning ? 'Continuous 24/7 Production Active' : isPaused ? 'Production Paused' : 'Production Stopped'}
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[#777] block">
+                Target Platform
+              </span>
+              <div className="flex items-center gap-2 mt-2">
+                {[
+                  { id: 'tiktok', label: 'TikTok (via Brave)' },
+                  { id: 'youtube', label: 'YouTube Shorts' },
+                  { id: 'both', label: 'Both (TikTok + Shorts)' }
+                ].map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setDestination(p.id as any)}
+                    className={`px-3 py-1.5 rounded text-xs font-medium border transition-all cursor-pointer ${
+                      destination === p.id
+                        ? 'bg-white text-black border-white font-semibold'
+                        : 'bg-black text-[#888] border-[#2a2a2a] hover:border-[#444] hover:text-white'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-2">
-              {!isRunning && !isPaused && (
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 shrink-0">
+              {queueStatus.is_running ? (
                 <button
-                  onClick={handleStart}
-                  disabled={loading}
-                  className="px-5 py-2.5 bg-white text-black font-semibold text-xs rounded hover:bg-[#eaeaea] transition-all cursor-pointer flex items-center gap-2"
+                  onClick={handleStopQueue}
+                  className="px-4 py-2 rounded bg-black text-white border border-[#444] hover:border-white text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <span>Pause Queue</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handlePublishAll}
+                  disabled={readyVideosCount === 0}
+                  className={`px-5 py-2 rounded text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg ${
+                    readyVideosCount > 0
+                      ? 'bg-white text-black hover:bg-[#eaeaea]'
+                      : 'bg-[#222] text-[#666] cursor-not-allowed border border-[#333]'
+                  }`}
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Start Studio</span>
+                  <span>Auto-Publish All ({readyVideosCount})</span>
                 </button>
               )}
-
-              {isRunning && (
-                <>
-                  <button
-                    onClick={handlePause}
-                    disabled={loading}
-                    className="px-4 py-2 bg-[#1a1a1a] text-white border border-[#333333] font-semibold text-xs rounded hover:bg-[#252525] transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <Pause className="w-3.5 h-3.5" />
-                    <span>Pause</span>
-                  </button>
-                  <button
-                    onClick={handleStop}
-                    disabled={loading}
-                    className="px-4 py-2 bg-transparent text-[#888888] hover:text-white border border-[#262626] hover:border-[#444444] font-semibold text-xs rounded transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <Square className="w-3.5 h-3.5 fill-current" />
-                    <span>Stop</span>
-                  </button>
-                </>
-              )}
-
-              {isPaused && (
-                <>
-                  <button
-                    onClick={handleResume}
-                    disabled={loading}
-                    className="px-5 py-2.5 bg-white text-black font-semibold text-xs rounded hover:bg-[#eaeaea] transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Resume</span>
-                  </button>
-                  <button
-                    onClick={handleStop}
-                    disabled={loading}
-                    className="px-4 py-2 bg-transparent text-[#888888] hover:text-white border border-[#262626] hover:border-[#444444] font-semibold text-xs rounded transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <Square className="w-3.5 h-3.5 fill-current" />
-                    <span>Stop</span>
-                  </button>
-                </>
-              )}
             </div>
           </div>
 
-          {/* Real-time Current Action */}
-          <div className="pt-4 border-t border-[#1a1a1a] space-y-2">
-            <div className="flex items-center justify-between text-xs text-[#888888]">
-              <span className="font-mono text-[11px] truncate">{agentStatus.current_action}</span>
-              <span className="font-mono">{agentStatus.progress?.toFixed(0) || 0}%</span>
-            </div>
-            <div className="w-full bg-[#161616] h-1 rounded overflow-hidden">
-              <div
-                className="bg-white h-full transition-all duration-300"
-                style={{ width: `${agentStatus.progress || 0}%` }}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Publishing Destination */}
-        <section className="space-y-4">
-          <div className="text-xs font-mono uppercase text-[#777777]">Publishing Destination</div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {[
-              { id: 'local', label: 'Local Archive' },
-              { id: 'youtube', label: 'YouTube Shorts' },
-              { id: 'tiktok', label: 'TikTok' },
-              { id: 'both', label: 'Both (YT + TikTok)' }
-            ].map(d => (
-              <button
-                key={d.id}
-                onClick={() => handleSetDestination(d.id)}
-                className={`py-3 px-4 rounded border text-xs font-medium text-center transition-all cursor-pointer ${
-                  currentDest === d.id
-                    ? 'bg-white text-black border-white'
-                    : 'bg-[#0a0a0a] text-[#888888] border-[#222222] hover:border-[#383838] hover:text-white'
-                }`}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-
-          {/* TikTok Account & Direct API Setup */}
-          {(currentDest === 'tiktok' || currentDest === 'both') && (
-            <div className="p-4 bg-[#0a0a0a] border border-[#222222] rounded space-y-3 text-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <span className="font-bold text-white block">TikTok Automated Publishing (Playwright Headless)</span>
-                  <span className="text-[#777777]">
-                    {channels.tiktok.connected
-                      ? `Active Session (@${channels.tiktok.account_name || 'TikTok Creator'}) — Videos will upload and post automatically.`
-                      : 'Playwright headless browser posts videos directly with captions and hashtags using your saved session.'}
-                  </span>
-                </div>
-                {channels.tiktok.connected && (
-                  <button
-                    onClick={() => handleDisconnect('tiktok')}
-                    className="text-[#666666] hover:text-white underline text-xs cursor-pointer self-start sm:self-auto"
-                  >
-                    Disconnect Session
-                  </button>
-                )}
+          {/* Active Queue Status Bar */}
+          {queueStatus.is_running && queueStatus.active_item && (
+            <div className="pt-4 border-t border-[#1a1a1a] flex items-center justify-between text-xs font-mono">
+              <div className="flex items-center gap-2 text-white">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                <span>
+                  Publishing: <strong className="font-bold">{queueStatus.active_item.title}</strong> to{' '}
+                  {queueStatus.active_item.destination?.toUpperCase()}...
+                </span>
               </div>
-
-              {!channels.tiktok.connected && (
-                <div className="pt-2 border-t border-[#1a1a1a] space-y-2">
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <button
-                      onClick={handleLaunchTikTokBrowser}
-                      className="px-4 py-2 bg-white text-black font-semibold rounded text-xs hover:bg-[#eaeaea] cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Connect with Brave Browser (1-Click Login)</span>
-                    </button>
-                    <span className="text-[#555] text-center sm:text-left">or paste cookies.json below:</span>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Paste cookies.json content or exported session..."
-                      value={ttToken}
-                      onChange={(e) => setTtToken(e.target.value)}
-                      className="bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white flex-1 font-mono"
-                    />
-                    <button
-                      onClick={() => handleSaveTikTokCookies(ttToken)}
-                      className="px-4 py-1.5 bg-[#222] text-white border border-[#333] hover:bg-[#333] rounded text-xs cursor-pointer whitespace-nowrap"
-                    >
-                      Save Cookies
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* YouTube Shorts Setup */}
-          {(currentDest === 'youtube' || currentDest === 'both') && (
-            <div className="p-4 bg-[#0a0a0a] border border-[#222222] rounded space-y-3 text-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <span className="font-bold text-white block">YouTube Shorts Automated Publishing (Google API v3)</span>
-                  <span className="text-[#777777]">
-                    {channels.youtube.connected
-                      ? `Active OAuth API (@${channels.youtube.account_name || 'YouTube Creator'}) — Videos will upload automatically with #Shorts.`
-                      : 'Uploads vertical videos under 60 seconds with #Shorts directly via YouTube Data API v3.'}
-                  </span>
-                </div>
-                {channels.youtube.connected && (
-                  <button
-                    onClick={() => handleDisconnect('youtube')}
-                    className="text-[#666666] hover:text-white underline text-xs cursor-pointer self-start sm:self-auto"
-                  >
-                    Disconnect Token
-                  </button>
-                )}
-              </div>
-
-              {!channels.youtube.connected && (
-                <div className="pt-2 border-t border-[#1a1a1a] flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <input
-                    type="password"
-                    placeholder="Paste youtube_token.json or OAuth Access Token..."
-                    value={ytToken}
-                    onChange={(e) => setYtToken(e.target.value)}
-                    className="bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white flex-1 font-mono"
-                  />
-                  <button
-                    onClick={() => handleSaveYouTubeToken(ytToken)}
-                    className="px-4 py-1.5 bg-white text-black font-semibold rounded text-xs hover:bg-[#eaeaea] cursor-pointer whitespace-nowrap"
-                  >
-                    Save Token
-                  </button>
-                </div>
-              )}
+              <span className="text-[#888]">
+                Remaining: {queueStatus.queued_count} | Done: {queueStatus.completed_count}
+              </span>
             </div>
           )}
         </section>
 
-        {/* Video Production Feed */}
-        <section className="space-y-4">
+        {/* Video Queue List */}
+        <section className="space-y-6">
           <div className="flex items-center justify-between">
-            <div className="text-xs font-mono uppercase text-[#777777]">
-              Produced Videos ({videos.length})
-            </div>
-            <button
-              onClick={() => { fetchVideos(); fetchStatus(); }}
-              className="text-xs text-[#888888] hover:text-white flex items-center gap-1 cursor-pointer"
-            >
-              <RefreshCw className="w-3 h-3" />
-              <span>Refresh</span>
-            </button>
+            <h3 className="text-sm font-mono uppercase tracking-wider text-[#888]">
+              Video Publishing Queue ({videos.length})
+            </h3>
+            {videos.length > 0 && (
+              <span className="text-xs text-[#666] font-mono">
+                {videos.filter(v => v.status === 'published').length} published · {readyVideosCount} ready
+              </span>
+            )}
           </div>
 
           {videos.length === 0 ? (
-            <div className="border border-dashed border-[#222222] rounded-lg p-12 text-center text-xs text-[#666666]">
-              Library is clear. Click "Start Studio" above to produce your first high-fidelity 3D video.
+            <div className="border border-dashed border-[#222] rounded-xl p-12 text-center text-xs text-[#666]">
+              No videos in queue. Drag & drop your video files into the box above to get started.
             </div>
           ) : (
-            <div className="space-y-8">
+            <div className="space-y-6">
               {videos.map(video => (
                 <article
                   key={video.id}
-                  className="border border-[#222222] bg-[#0a0a0a] rounded-lg p-6 space-y-5"
+                  className="border border-[#222] bg-[#0a0a0a] rounded-xl p-6 space-y-5 transition-all hover:border-[#333]"
                 >
-                  {/* Top Bar: Title & Metadata */}
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                    <div>
-                      <span className="text-[10px] font-mono uppercase text-[#777777] block mb-1">
-                        {video.category || 'Science'} · {video.duration ? `${video.duration.toFixed(1)}s` : '35s'} · 1080x1920 3D · QC Passed
-                      </span>
-                      <h3 className="text-lg font-bold text-white tracking-tight">
-                        {video.title}
-                      </h3>
+                  {/* Top Bar: Title & Status */}
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono uppercase text-[#777]">
+                          {video.duration ? `${video.duration.toFixed(1)}s` : 'Short'} · {video.category || 'Custom'}
+                        </span>
+
+                        {/* Status Badge */}
+                        <span
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase ${
+                            video.status === 'published'
+                              ? 'bg-[#0f2913] text-[#4ade80] border-[#166534]'
+                              : video.status === 'publishing'
+                              ? 'bg-[#291b0f] text-[#fb923c] border-[#9a3412] animate-pulse'
+                              : video.status === 'failed'
+                              ? 'bg-[#290f0f] text-[#f87171] border-[#991b1b]'
+                              : 'bg-[#161616] text-[#aaa] border-[#333]'
+                          }`}
+                        >
+                          {video.status === 'published'
+                            ? 'Published'
+                            : video.status === 'publishing'
+                            ? 'Publishing via Brave...'
+                            : video.status === 'failed'
+                            ? 'Upload Failed'
+                            : 'Ready to Publish'}
+                        </span>
+                      </div>
+
+                      <h4 className="text-base font-bold text-white tracking-tight">{video.title}</h4>
                     </div>
 
+                    {/* Action Buttons */}
                     <div className="flex items-center gap-2 shrink-0">
-                      {/* Auto-Publish via Playwright */}
+                      {video.status === 'published' ? (
+                        <div className="flex items-center gap-2">
+                          {video.tiktok_url && (
+                            <a
+                              href="https://www.tiktok.com/tiktokstudio/manage"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1.5 rounded bg-white text-black hover:bg-[#eaeaea] text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                            >
+                              <span>TikTok Post</span>
+                              <ArrowUpRight className="w-3 h-3 text-black" />
+                            </a>
+                          )}
+                          {video.youtube_url && (
+                            <a
+                              href={video.youtube_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1.5 rounded bg-[#161616] text-white border border-[#333] hover:border-white text-xs font-medium flex items-center gap-1.5 transition-all"
+                            >
+                              <span>Shorts Link</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handlePublishSingle(video.id)}
+                          disabled={video.status === 'publishing'}
+                          className="px-3.5 py-1.5 rounded bg-white text-black hover:bg-[#eaeaea] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                        >
+                          <Play className="w-3 h-3 fill-current" />
+                          <span>Publish Now</span>
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => handleAutoPublish(video.id, 'tiktok')}
-                        className="px-3.5 py-1.5 rounded bg-white text-black hover:bg-[#eaeaea] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
-                        title="Uploads video, injects caption and hashtags, and clicks Post automatically via Playwright"
+                        onClick={() => handleRegenerateMetadata(video.id)}
+                        title="Regenerate viral caption, hashtags, and discussion comment"
+                        className="p-1.5 rounded bg-black border border-[#2a2a2a] hover:border-white text-[#888] hover:text-white transition-all cursor-pointer"
                       >
-                        <UploadCloud className="w-3.5 h-3.5 text-black" />
-                        <span>Auto-Upload to TikTok</span>
+                        <Sparkles className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Auto-Publish to YouTube Shorts */}
                       <button
-                        onClick={() => handleAutoPublish(video.id, 'youtube')}
-                        className="px-3 py-1.5 rounded bg-[#161616] text-white hover:bg-[#252525] border border-[#2a2a2a] text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all"
-                        title="Uploads directly to YouTube Shorts via Data API v3"
+                        onClick={() => handleDeleteVideo(video.id)}
+                        title="Remove from queue"
+                        className="p-1.5 rounded bg-black border border-[#2a2a2a] hover:border-[#666] text-[#666] hover:text-[#f87171] transition-all cursor-pointer"
                       >
-                        <span>Auto-Upload Shorts</span>
-                        <ExternalLink className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  {/* Embedded 3D Video Player */}
+                  {/* Video Player Preview */}
                   {video.video_path && (
-                    <div className="bg-black rounded border border-[#1a1a1a] flex justify-center p-3 relative group">
+                    <div className="bg-black rounded border border-[#1a1a1a] flex justify-center p-3 relative">
                       <video
                         controls
-                        className="max-h-96 w-auto rounded shadow-2xl"
-                        src={`/media/${video.video_path.replace(/\\/g, '/').split('output/')[1] || 'video.mp4'}`}
+                        className="max-h-80 w-auto rounded shadow-xl"
+                        src={`/media/${video.video_path.replace(/\\/g, '/').split('output/')[1] || 'uploads/video.mp4'}`}
                       />
                     </div>
                   )}
 
-                  {/* Narration Script */}
-                  <div className="p-3.5 bg-black border border-[#1a1a1a] rounded text-xs space-y-1">
-                    <span className="font-mono text-[10px] uppercase text-[#777777] block">Narration Script</span>
-                    <p className="text-[#bbbbbb] leading-relaxed text-xs">
-                      {video.script}
-                    </p>
-                  </div>
+                  {/* Detected / Extracted Script */}
+                  {video.script && (
+                    <div className="p-3 bg-black border border-[#1a1a1a] rounded text-xs space-y-1">
+                      <span className="font-mono text-[10px] uppercase text-[#777] block">
+                        Transcribed Spoken Script
+                      </span>
+                      <p className="text-[#aaa] leading-relaxed text-xs">{video.script}</p>
+                    </div>
+                  )}
 
-                  {/* TikTok Pinned Commentary Box */}
+                  {/* Viral Caption & Algorithm Reach Hashtags */}
+                  {video.tiktok_hashtags && (
+                    <div className="p-3.5 bg-black border border-[#1f1f1f] rounded space-y-2 text-xs">
+                      <div className="flex items-center justify-between text-[#888]">
+                        <span className="font-mono text-[11px] uppercase text-white font-semibold flex items-center gap-1.5">
+                          <Hash className="w-3.5 h-3.5 text-white" />
+                          <span>Generated Caption & Viral Reach Hashtags</span>
+                        </span>
+                        <button
+                          onClick={() => {
+                            const full = `${video.title}\n\n${video.tiktok_hashtags}`;
+                            copyToClipboard(full, `cap-${video.id}`);
+                          }}
+                          className="text-xs hover:text-white flex items-center gap-1 cursor-pointer font-mono"
+                        >
+                          {copiedKey === `cap-${video.id}` ? (
+                            <>
+                              <Check className="w-3 h-3 text-white" />
+                              <span className="text-white">Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Copy Caption</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-[#ccc] text-xs font-mono select-all bg-[#0a0a0a] p-2.5 rounded border border-[#181818]">
+                        <span className="text-white font-bold">{video.title}</span>
+                        <br /><br />
+                        <span className="text-[#888]">{video.tiktok_hashtags}</span>
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Pinned Discussion Commentary */}
                   {video.tiktok_commentary && (
                     <div className="p-3.5 bg-black border border-[#1f1f1f] rounded space-y-2 text-xs">
-                      <div className="flex items-center justify-between text-[#888888]">
+                      <div className="flex items-center justify-between text-[#888]">
                         <span className="font-mono text-[11px] uppercase text-white font-semibold flex items-center gap-1.5">
                           <MessageSquareQuote className="w-3.5 h-3.5 text-white" />
-                          <span>TikTok Pinned Comment (Drives Views & Replies)</span>
+                          <span>TikTok Pinned Comment (Drives Replies & Retention)</span>
                         </span>
                         <button
                           onClick={() => copyToClipboard(video.tiktok_commentary, `comm-${video.id}`)}
@@ -626,39 +639,11 @@ const handleConnectToken = async (platform: string, token: string) => {
                     </div>
                   )}
 
-                  {/* TikTok Caption & Viral Reach Hashtags */}
-                  {video.tiktok_hashtags && (
-                    <div className="p-3.5 bg-black border border-[#1f1f1f] rounded space-y-2 text-xs">
-                      <div className="flex items-center justify-between text-[#888888]">
-                        <span className="font-mono text-[11px] uppercase text-white font-semibold flex items-center gap-1.5">
-                          <Hash className="w-3.5 h-3.5 text-white" />
-                          <span>TikTok Caption & Algorithm Reach Hashtags</span>
-                        </span>
-                        <button
-                          onClick={() => {
-                            const full = `${video.title} 🤯 Science breakdown you didn't know!\n\n${video.tiktok_hashtags}`;
-                            copyToClipboard(full, `tags-${video.id}`);
-                          }}
-                          className="text-xs hover:text-white flex items-center gap-1 cursor-pointer font-mono"
-                        >
-                          {copiedKey === `tags-${video.id}` ? (
-                            <>
-                              <Check className="w-3 h-3 text-white" />
-                              <span className="text-white">Copied</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3 h-3" />
-                              <span>Copy Caption & Tags</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                      <p className="text-[#cccccc] text-xs font-mono select-all bg-[#0a0a0a] p-2.5 rounded border border-[#181818]">
-                        <span className="text-white font-bold">{video.title} 🤯 Science breakdown you didn't know!</span>
-                        <br /><br />
-                        <span className="text-[#888888]">{video.tiktok_hashtags}</span>
-                      </p>
+                  {/* Failure Details */}
+                  {video.error_message && video.status === 'failed' && (
+                    <div className="p-3 bg-[#1a0a0a] border border-[#3b1212] rounded text-xs text-[#f87171] flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{video.error_message}</span>
                     </div>
                   )}
                 </article>
@@ -667,6 +652,97 @@ const handleConnectToken = async (platform: string, token: string) => {
           )}
         </section>
       </main>
+
+      {/* Platform Channel Connection Modal */}
+      {showChannelsModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl max-w-lg w-full p-6 space-y-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#222] pb-4">
+              <h3 className="text-sm font-bold tracking-tight text-white font-mono uppercase">
+                Platform Channel Accounts
+              </h3>
+              <button
+                onClick={() => setShowChannelsModal(false)}
+                className="text-[#666] hover:text-white text-xs font-mono cursor-pointer"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* TikTok Session */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-white block">TikTok (Brave Browser Engine)</span>
+                  <span className="text-[11px] text-[#777]">
+                    {channels.tiktok?.connected
+                      ? 'Active session in Brave. Uploads run in the background.'
+                      : 'Connect your TikTok account via Brave.'}
+                  </span>
+                </div>
+                {channels.tiktok?.connected ? (
+                  <button
+                    onClick={() => handleDisconnect('tiktok')}
+                    className="text-xs text-[#f87171] hover:underline cursor-pointer"
+                  >
+                    Disconnect
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleLaunchBraveTikTok}
+                  className="px-3.5 py-1.5 rounded bg-white text-black text-xs font-semibold hover:bg-[#eaeaea] cursor-pointer flex items-center gap-1.5"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>{channels.tiktok?.connected ? 'Re-open Brave Login' : 'Log In via Brave'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* YouTube Shorts */}
+            <div className="space-y-3 pt-4 border-t border-[#222]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-white block">YouTube Shorts (Google Data API v3)</span>
+                  <span className="text-[11px] text-[#777]">
+                    {channels.youtube?.connected
+                      ? 'OAuth credentials active. Auto-publishes to Shorts shelf.'
+                      : 'Paste OAuth JSON or refresh token.'}
+                  </span>
+                </div>
+                {channels.youtube?.connected ? (
+                  <button
+                    onClick={() => handleDisconnect('youtube')}
+                    className="text-xs text-[#f87171] hover:underline cursor-pointer"
+                  >
+                    Disconnect
+                  </button>
+                ) : null}
+              </div>
+
+              {!channels.youtube?.connected && (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Paste youtube_token.json content or OAuth credentials..."
+                    value={ytToken}
+                    onChange={(e) => setYtToken(e.target.value)}
+                    className="w-full bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] font-mono focus:outline-none focus:border-white"
+                  />
+                  <button
+                    onClick={handleSaveYouTubeToken}
+                    className="px-3.5 py-1.5 rounded bg-white text-black text-xs font-semibold hover:bg-[#eaeaea] cursor-pointer"
+                  >
+                    Save YouTube Token
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

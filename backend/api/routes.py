@@ -272,17 +272,21 @@ class VideoUpdateRequest(BaseModel):
 @router.post("/videos/upload")
 async def upload_videos_endpoint(
     files: List[UploadFile] = File(...),
-    destination: str = Form("tiktok")
+    destination: str = Form("tiktok"),
+    auto_publish: bool = Form(False)
 ):
     from pathlib import Path
     import uuid
     import re
     from backend.config import settings
     from backend.publishing.video_prober import probe_video_metadata, generate_video_thumbnail
+    from backend.media.transcriber import transcribe_video_audio
+    from backend.publishing.metadata_generator import generate_smart_metadata
 
     upload_dir = settings.base_dir / "output" / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
     created_videos = []
+    video_ids_to_publish = []
 
     with get_db() as session:
         for f in files:
@@ -304,24 +308,28 @@ async def upload_videos_endpoint(
             meta = probe_video_metadata(str(saved_path))
             generate_video_thumbnail(str(saved_path), str(thumb_path))
 
-            default_hashtags = "#fyp #foryou #viral #trending #shorts #creator"
-            default_commentary = "What did you think about this? Drop your thoughts below! 👇"
+            # Transcribe spoken script from audio if available
+            spoken_script = transcribe_video_audio(str(saved_path))
+            script_text = spoken_script if spoken_script else clean_title
+
+            # Generate viral metadata from the script
+            smart_meta = generate_smart_metadata(raw_title=clean_title, script=script_text)
 
             video = crud.create_video(
                 session=session,
-                title=clean_title,
+                title=smart_meta["title"],
                 topic="Uploaded",
                 category="custom",
-                script=clean_title,
-                hook=clean_title,
+                script=script_text,
+                hook=smart_meta["title"],
                 status="ready"
             )
             video.video_path = str(saved_path.resolve())
             video.thumbnail_path = str(thumb_path.resolve()) if thumb_path.exists() else None
             video.duration = meta.get("duration", 0.0)
-            video.tiktok_hashtags = default_hashtags
-            video.tiktok_commentary = default_commentary
-            video.youtube_tags = "shorts,viral,trending,custom"
+            video.tiktok_hashtags = smart_meta["tiktok_hashtags"]
+            video.tiktok_commentary = smart_meta["tiktok_commentary"]
+            video.youtube_tags = smart_meta["youtube_tags"]
             session.commit()
 
             created_videos.append({
@@ -329,14 +337,27 @@ async def upload_videos_endpoint(
                 "title": video.title,
                 "duration": video.duration,
                 "status": video.status,
+                "script": video.script,
                 "video_path": video.video_path,
                 "thumbnail_path": video.thumbnail_path,
                 "tiktok_hashtags": video.tiktok_hashtags,
                 "tiktok_commentary": video.tiktok_commentary,
                 "created_at": video.created_at.isoformat() if video.created_at else None
             })
+            video_ids_to_publish.append(video.id)
 
-    return {"success": True, "count": len(created_videos), "videos": created_videos}
+    if auto_publish and video_ids_to_publish:
+        from backend.publishing.publish_queue import get_publish_queue
+        queue = get_publish_queue()
+        queue.enqueue_db_videos(video_ids_to_publish, destination=destination)
+        queue.start()
+
+    return {
+        "success": True,
+        "count": len(created_videos),
+        "auto_published": auto_publish,
+        "videos": created_videos
+    }
 
 @router.delete("/videos/{video_id}")
 def delete_video_endpoint(video_id: int):
