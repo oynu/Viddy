@@ -287,19 +287,29 @@ async def upload_videos_endpoint(
     upload_dir.mkdir(parents=True, exist_ok=True)
     created_videos = []
     video_ids_to_publish = []
+    ALLOWED_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
 
     with get_db() as session:
         for f in files:
             orig_filename = f.filename or "video.mp4"
+            ext = Path(orig_filename).suffix.lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                continue
+
             clean_stem = Path(orig_filename).stem
             clean_title = re.sub(r"[_\-\.]+", " ", clean_stem).strip().title()
             if not clean_title:
                 clean_title = "Uploaded Short Video"
 
             unique_id = uuid.uuid4().hex[:8]
-            safe_filename = f"{unique_id}_{Path(orig_filename).name}"
-            saved_path = upload_dir / safe_filename
-            thumb_path = upload_dir / f"{unique_id}_thumb.jpg"
+            safe_stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", clean_stem)[:60]
+            safe_filename = f"{unique_id}_{safe_stem}{ext}"
+            saved_path = (upload_dir / safe_filename).resolve()
+            thumb_path = (upload_dir / f"{unique_id}_thumb.jpg").resolve()
+
+            # Path traversal guard
+            if not str(saved_path).startswith(str(upload_dir.resolve())):
+                continue
 
             with open(saved_path, "wb") as buffer:
                 while chunk := await f.read(1024 * 1024):
@@ -515,6 +525,11 @@ def get_channels():
     import json
     from backend.publishing.tiktok_auth import has_saved_tiktok_cookies, TIKTOK_COOKIES_PATH
     from backend.publishing.youtube_publisher import YOUTUBE_TOKEN_PATH
+    from backend.publishing.browser_utils import get_primary_browser, get_detected_browsers
+
+    browser_name, browser_path = get_primary_browser()
+    detected_all = get_detected_browsers()
+
     with get_db() as session:
         yt = crud.get_platform_account(session, "youtube")
         tt = crud.get_platform_account(session, "tiktok")
@@ -531,9 +546,14 @@ def get_channels():
             },
             "tiktok": {
                 "connected": tt_connected,
-                "account_name": tt.account_name if tt and tt.account_name else ("TikTok (cookies.json Active)" if has_saved_tiktok_cookies() else None),
+                "account_name": tt.account_name if tt and tt.account_name else (f"TikTok ({browser_name} Active)" if has_saved_tiktok_cookies() else None),
                 "channel_id": tt.channel_id if tt else None,
                 "token_expiry": tt.token_expiry.isoformat() if tt and tt.token_expiry else None
+            },
+            "browser": {
+                "name": browser_name,
+                "path": browser_path,
+                "installed": [b["name"] for b in detected_all]
             }
         }
 
@@ -549,14 +569,16 @@ def save_tiktok_cookies_route(payload: TikTokCookiesPayload):
 @router.post("/channels/tiktok/login-browser")
 async def trigger_tiktok_browser_login():
     from backend.publishing.tiktok_auth import launch_interactive_tiktok_login
+    from backend.publishing.browser_utils import get_primary_browser
+    browser_name, _ = get_primary_browser()
     async def _safe_login():
         try:
             await launch_interactive_tiktok_login(headless=False)
         except Exception as e:
             with get_db() as s:
-                crud.add_log(s, f"TikTok Brave login error: {str(e)}", stage="PUBLISH", level="ERROR")
+                crud.add_log(s, f"TikTok ({browser_name}) login error: {str(e)}", stage="PUBLISH", level="ERROR")
     asyncio.create_task(_safe_login())
-    return {"message": "TikTok login window launched. Please sign in on the browser window to save your session."}
+    return {"message": f"TikTok login window launched via {browser_name}. Please sign in to save your session."}
 
 @router.post("/channels/youtube/token")
 def save_youtube_token_route(payload: YouTubeTokenPayload):

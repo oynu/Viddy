@@ -2,26 +2,124 @@ import os
 import shutil
 import asyncio
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
-def find_brave_executable() -> Optional[str]:
+def get_detected_browsers() -> List[Dict[str, str]]:
     """
-    Locates the Brave Browser executable on Windows or other OS.
-    Checks environment overrides, standard install paths, and PATH.
+    Discovers installed modern Chromium-based browsers across Windows, macOS, and Linux.
+    Returns list of detected browsers sorted by preference:
+    1. Brave Browser (recommended for ad/tracker shield & anti-detection)
+    2. Google Chrome
+    3. Microsoft Edge
+    4. Chromium
     """
-    candidates = [
-        os.environ.get("BRAVE_PATH"),
+    browsers: List[Dict[str, str]] = []
+
+    # 1. Custom Override
+    custom_path = os.environ.get("BROWSER_PATH") or os.environ.get("BRAVE_PATH")
+    if custom_path and Path(custom_path).is_file():
+        browsers.append({
+            "name": "Custom Browser",
+            "path": str(Path(custom_path).resolve())
+        })
+
+    # 2. Brave Browser
+    brave_candidates = [
         r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
         r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
         os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe"),
         os.path.expandvars(r"%PROGRAMFILES%\BraveSoftware\Brave-Browser\Application\brave.exe"),
+        "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        "/usr/bin/brave-browser",
+        "/usr/bin/brave",
         shutil.which("brave"),
-        shutil.which("brave.exe")
+        shutil.which("brave.exe"),
+        shutil.which("brave-browser")
     ]
-    for c in candidates:
+    for c in brave_candidates:
         if c and Path(c).is_file():
-            return str(Path(c).resolve())
-    return None
+            browsers.append({
+                "name": "Brave",
+                "path": str(Path(c).resolve())
+            })
+            break
+
+    # 3. Google Chrome
+    chrome_candidates = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"),
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chrome",
+        shutil.which("google-chrome"),
+        shutil.which("chrome"),
+        shutil.which("chrome.exe")
+    ]
+    for c in chrome_candidates:
+        if c and Path(c).is_file():
+            browsers.append({
+                "name": "Google Chrome",
+                "path": str(Path(c).resolve())
+            })
+            break
+
+    # 4. Microsoft Edge
+    edge_candidates = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+        os.path.expandvars(r"%PROGRAMFILES(X86)%\Microsoft\Edge\Application\msedge.exe"),
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/usr/bin/microsoft-edge",
+        "/usr/bin/microsoft-edge-stable",
+        shutil.which("msedge"),
+        shutil.which("msedge.exe"),
+        shutil.which("microsoft-edge")
+    ]
+    for c in edge_candidates:
+        if c and Path(c).is_file():
+            browsers.append({
+                "name": "Microsoft Edge",
+                "path": str(Path(c).resolve())
+            })
+            break
+
+    # 5. Generic Chromium
+    chromium_candidates = [
+        r"C:\Program Files\Chromium\Application\chrome.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Chromium\Application\chrome.exe"),
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        shutil.which("chromium"),
+        shutil.which("chromium-browser")
+    ]
+    for c in chromium_candidates:
+        if c and Path(c).is_file():
+            browsers.append({
+                "name": "Chromium",
+                "path": str(Path(c).resolve())
+            })
+            break
+
+    return browsers
+
+def get_primary_browser() -> Tuple[str, Optional[str]]:
+    """
+    Returns the best available browser as (name, executable_path).
+    Falls back to ('Playwright Browser Engine', None) if no local browser is installed.
+    """
+    detected = get_detected_browsers()
+    if detected:
+        return detected[0]["name"], detected[0]["path"]
+    return "Playwright Browser Engine", None
+
+def find_brave_executable() -> Optional[str]:
+    """Backward compatibility alias: returns executable path of the best detected browser."""
+    _, path = get_primary_browser()
+    return path
 
 def clean_stale_profile_locks(profile_dir: Path):
     """
@@ -128,7 +226,6 @@ async def sweep_page_traps(page):
             count = await loc.count()
             for i in range(count):
                 btn = loc.nth(i)
-                # Don't click the primary Post button if label matches
                 txt = (await btn.inner_text()).strip().lower()
                 if txt in ["post", "publicar"]:
                     continue

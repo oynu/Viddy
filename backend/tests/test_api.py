@@ -36,6 +36,9 @@ def test_api_status_and_controls():
         channels = channels_res.json()
         assert "youtube" in channels
         assert "tiktok" in channels
+        assert "browser" in channels
+        assert "name" in channels["browser"]
+        assert "installed" in channels["browser"]
 
         # 5. Check logs listing
         logs_res = client.get("/api/logs")

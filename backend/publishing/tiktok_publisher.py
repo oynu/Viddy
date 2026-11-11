@@ -9,6 +9,7 @@ import httpx
 
 from backend.config import settings
 from backend.publishing.browser_utils import (
+    get_primary_browser,
     find_brave_executable,
     clean_stale_profile_locks,
     get_browser_args,
@@ -103,7 +104,7 @@ class TikTokPublisher:
         # Clean lingering locks from previous unexpected exits
         clean_stale_profile_locks(self.user_data_dir)
 
-        brave_path = find_brave_executable()
+        browser_name, browser_path = get_primary_browser()
         is_first_time = not self.is_connected()
         headless_mode = not is_first_time
 
@@ -114,11 +115,11 @@ class TikTokPublisher:
             "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "args": get_browser_args(headless=headless_mode)
         }
-        if brave_path:
-            launch_kwargs["executable_path"] = brave_path
-            print(f"[*] [TIKTOK PUBLISH] Launching Brave Browser ({brave_path}) headless={headless_mode}...")
+        if browser_path:
+            launch_kwargs["executable_path"] = browser_path
+            print(f"[*] [TIKTOK PUBLISH] Launching {browser_name} ({browser_path}) headless={headless_mode}...")
         else:
-            print(f"[*] [TIKTOK PUBLISH] Launching browser engine (headless={headless_mode})...")
+            print(f"[*] [TIKTOK PUBLISH] Launching standard browser engine (headless={headless_mode})...")
 
         context = None
         async with async_playwright() as p:

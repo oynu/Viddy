@@ -40,6 +40,7 @@ export const App: React.FC = () => {
   const [ytToken, setYtToken] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const browserName = channels?.browser?.name || 'Browser';
 
   const showNotification = (msg: string) => {
     setNotification(msg);
@@ -127,7 +128,7 @@ export const App: React.FC = () => {
       });
       const data = await res.json();
       if (data.success) {
-        showNotification(`Publishing video to ${destination.toUpperCase()} via Brave...`);
+        showNotification(`Publishing video to ${destination.toUpperCase()} via ${browserName}...`);
         await fetchQueueStatus();
         await fetchVideos();
       }
@@ -145,7 +146,7 @@ export const App: React.FC = () => {
       });
       const data = await res.json();
       if (data.success) {
-        showNotification(`Publishing ${data.enqueued_count} videos to ${destination.toUpperCase()} via Brave!`);
+        showNotification(`Publishing ${data.enqueued_count} videos to ${destination.toUpperCase()} via ${browserName}!`);
         await fetchQueueStatus();
         await fetchVideos();
       }
@@ -191,9 +192,9 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleLaunchBraveTikTok = async () => {
+  const handleLaunchBrowserTikTok = async () => {
     try {
-      showNotification('Launching Brave Browser... Sign in to TikTok to save your session.');
+      showNotification(`Launching ${browserName}... Sign in to TikTok to save your session.`);
       await fetch('/api/channels/tiktok/login-browser', { method: 'POST' });
       const pollTimer = setInterval(async () => {
         try {
@@ -201,14 +202,14 @@ export const App: React.FC = () => {
           const data = await res.json();
           if (data?.tiktok?.connected) {
             setChannels(data);
-            showNotification('✓ TikTok Brave session connected and verified!');
+            showNotification(`✓ TikTok ${browserName} session connected and verified!`);
             clearInterval(pollTimer);
           }
         } catch (_) {}
       }, 3000);
       setTimeout(() => clearInterval(pollTimer), 120000);
     } catch (e) {
-      showNotification('Failed to launch Brave browser login.');
+      showNotification(`Failed to launch ${browserName} login.`);
     }
   };
 
@@ -263,7 +264,7 @@ export const App: React.FC = () => {
         <div className="flex items-center gap-2.5">
           {/* TikTok Pill */}
           <button
-            onClick={channels.tiktok?.connected ? () => setShowChannelsModal(true) : handleLaunchBraveTikTok}
+            onClick={channels.tiktok?.connected ? () => setShowChannelsModal(true) : handleLaunchBrowserTikTok}
             className={`px-3 py-1.5 rounded text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer border ${
               channels.tiktok?.connected
                 ? 'bg-[#111] text-white border-[#333] hover:border-white'
@@ -271,7 +272,7 @@ export const App: React.FC = () => {
             }`}
           >
             <span className={`w-2 h-2 rounded-full ${channels.tiktok?.connected ? 'bg-white' : 'bg-black'}`} />
-            <span>{channels.tiktok?.connected ? 'TikTok (Brave Active)' : 'Connect TikTok in Brave'}</span>
+            <span>{channels.tiktok?.connected ? `TikTok (${browserName} Active)` : `Connect TikTok in ${browserName}`}</span>
           </button>
 
           {/* YouTube Shorts Pill */}
@@ -309,7 +310,7 @@ export const App: React.FC = () => {
           </span>
           <div className="flex items-center gap-2">
             {[
-              { id: 'tiktok', label: 'TikTok (Brave)' },
+              { id: 'tiktok', label: `TikTok (${browserName})` },
               { id: 'youtube', label: 'YouTube Shorts' },
               { id: 'both', label: 'Both' }
             ].map(p => (
@@ -442,7 +443,7 @@ export const App: React.FC = () => {
                         {video.status === 'published'
                           ? 'Published'
                           : video.status === 'publishing'
-                          ? 'Publishing in Brave...'
+                          ? `Publishing in ${browserName}...`
                           : video.status === 'failed'
                           ? 'Failed'
                           : 'Ready to Post'}
@@ -629,21 +630,21 @@ export const App: React.FC = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-bold text-white block">TikTok (Brave Browser)</span>
+                  <span className="text-xs font-bold text-white block">TikTok ({browserName})</span>
                   <span className="text-[11px] text-[#777]">
                     {channels.tiktok?.connected
-                      ? 'Session saved in Brave. Background uploads active.'
-                      : 'Log into TikTok once in Brave to save your session.'}
+                      ? `Session saved in ${browserName}. Background uploads active.`
+                      : `Log into TikTok once in ${browserName} to save your session.`}
                   </span>
                 </div>
               </div>
 
               <button
-                onClick={handleLaunchBraveTikTok}
+                onClick={handleLaunchBrowserTikTok}
                 className="px-3.5 py-1.5 rounded bg-white text-black text-xs font-semibold hover:bg-[#eaeaea] cursor-pointer flex items-center gap-1.5"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>{channels.tiktok?.connected ? 'Re-open Brave Login' : 'Log In via Brave'}</span>
+                <span>{channels.tiktok?.connected ? `Re-open ${browserName} Login` : `Log In via ${browserName}`}</span>
               </button>
             </div>
 

@@ -7,6 +7,7 @@ from playwright.async_api import async_playwright
 
 from backend.config import settings
 from backend.publishing.browser_utils import (
+    get_primary_browser,
     find_brave_executable,
     clean_stale_profile_locks,
     get_browser_args,
@@ -25,11 +26,11 @@ async def launch_interactive_tiktok_login(headless: bool = False, timeout_second
     Automatically captures and saves the persistent session and cookies.json.
     Once saved, all subsequent uploads run autonomously in the background.
     """
-    brave_path = find_brave_executable()
-    if brave_path:
-        print(f"[*] [TIKTOK AUTH] Using Brave Browser: {brave_path}")
+    browser_name, browser_path = get_primary_browser()
+    if browser_path:
+        print(f"[*] [TIKTOK AUTH] Using {browser_name}: {browser_path}")
     else:
-        print("[*] [TIKTOK AUTH] Brave Browser not detected in default paths, falling back to standard browser engine.")
+        print("[*] [TIKTOK AUTH] Local browser not detected, falling back to Playwright engine.")
 
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
     TIKTOK_COOKIES_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -43,8 +44,8 @@ async def launch_interactive_tiktok_login(headless: bool = False, timeout_second
             "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "args": get_browser_args(headless=headless)
         }
-        if brave_path:
-            launch_kwargs["executable_path"] = brave_path
+        if browser_path:
+            launch_kwargs["executable_path"] = browser_path
 
         try:
             context = await p.chromium.launch_persistent_context(**launch_kwargs)
@@ -96,7 +97,7 @@ async def launch_interactive_tiktok_login(headless: bool = False, timeout_second
                 json.dump(cookies, f, indent=2)
             try:
                 with get_db() as s:
-                    crud.upsert_platform_account(s, "tiktok", is_connected=True, account_name="TikTok (Brave Session Active)")
+                    crud.upsert_platform_account(s, "tiktok", is_connected=True, account_name=f"TikTok ({browser_name} Session Active)")
             except Exception:
                 pass
             await context.close()
@@ -142,7 +143,7 @@ async def launch_interactive_tiktok_login(headless: bool = False, timeout_second
                 json.dump(cookies, f, indent=2)
             try:
                 with get_db() as s:
-                    crud.upsert_platform_account(s, "tiktok", is_connected=True, account_name="TikTok (Brave Session Active)")
+                    crud.upsert_platform_account(s, "tiktok", is_connected=True, account_name=f"TikTok ({browser_name} Session Active)")
             except Exception:
                 pass
 
