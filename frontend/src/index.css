@@ -4,10 +4,12 @@
 
 @layer base {
   body {
-    background-color: #000000;
+    background-color: #030305;
     background-image: 
-      radial-gradient(ellipse 90% 45% at 50% -15%, rgba(255, 255, 255, 0.07), transparent 70%),
-      radial-gradient(ellipse 60% 40% at 50% 100%, rgba(255, 255, 255, 0.02), transparent);
+      radial-gradient(circle 800px at 50% -100px, rgba(255, 255, 255, 0.12), transparent 70%),
+      radial-gradient(circle 600px at 15% 450px, rgba(255, 255, 255, 0.04), transparent 60%),
+      radial-gradient(circle 600px at 85% 650px, rgba(255, 255, 255, 0.04), transparent 60%),
+      radial-gradient(ellipse 90% 40% at 50% 100%, rgba(255, 255, 255, 0.03), transparent);
     background-attachment: fixed;
     color: #ffffff;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -17,110 +19,126 @@
   }
 }
 
-/* Apple Liquid Glass Surface Utilities */
+/* Apple VisionOS & macOS Liquid Glass Surface Utilities */
 @layer components {
   .glass-panel {
-    background: rgba(255, 255, 255, 0.025);
-    backdrop-filter: blur(28px) saturate(180%);
-    -webkit-backdrop-filter: blur(28px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     box-shadow: 
-      0 8px 32px 0 rgba(0, 0, 0, 0.45),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+      0 16px 40px -10px rgba(0, 0, 0, 0.65),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.28),
+      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.3);
   }
 
   .glass-card {
-    background: rgba(255, 255, 255, 0.02);
-    backdrop-filter: blur(24px) saturate(160%);
-    -webkit-backdrop-filter: blur(24px) saturate(160%);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.065) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(28px) saturate(190%);
+    -webkit-backdrop-filter: blur(28px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     box-shadow: 
-      0 4px 24px -1px rgba(0, 0, 0, 0.4),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      0 12px 32px -6px rgba(0, 0, 0, 0.55),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.22);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .glass-card:hover {
-    background: rgba(255, 255, 255, 0.035);
-    border-color: rgba(255, 255, 255, 0.14);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.035) 100%);
+    border-color: rgba(255, 255, 255, 0.24);
     box-shadow: 
-      0 12px 36px -4px rgba(0, 0, 0, 0.6),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.16);
-    transform: translateY(-1px);
+      0 20px 48px -10px rgba(0, 0, 0, 0.7),
+      0 0 25px rgba(255, 255, 255, 0.06),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.35);
+    transform: translateY(-2px);
   }
 
   .glass-pill {
-    background: rgba(255, 255, 255, 0.035);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.035) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 
+      0 2px 10px rgba(0, 0, 0, 0.35),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.22);
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .glass-pill:hover {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: rgba(255, 255, 255, 0.18);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.06) 100%);
+    border-color: rgba(255, 255, 255, 0.3);
     box-shadow: 
-      0 2px 12px rgba(0, 0, 0, 0.35),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.18);
+      0 4px 16px rgba(0, 0, 0, 0.45),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.35);
+    transform: translateY(-0.5px);
   }
 
   .glass-pill-active {
-    background: #ffffff;
+    background: linear-gradient(180deg, #ffffff 0%, #ebebeb 100%);
     color: #000000;
     border: 1px solid #ffffff;
     box-shadow: 
-      0 2px 14px rgba(255, 255, 255, 0.25),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.85);
+      0 4px 16px rgba(255, 255, 255, 0.25),
+      0 1px 3px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 0 #ffffff;
   }
 
   .glass-dropzone {
-    background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 70%);
-    backdrop-filter: blur(30px);
-    -webkit-backdrop-filter: blur(30px);
-    border: 1px dashed rgba(255, 255, 255, 0.14);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(32px) saturate(190%);
+    -webkit-backdrop-filter: blur(32px) saturate(190%);
+    border: 1.5px dashed rgba(255, 255, 255, 0.22);
     box-shadow: 
-      0 8px 32px 0 rgba(0, 0, 0, 0.45),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+      0 16px 40px -10px rgba(0, 0, 0, 0.6),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.28);
     transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .glass-dropzone-dragover {
-    background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025) 70%);
+  .glass-dropzone:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%);
     border-color: rgba(255, 255, 255, 0.35);
-    border-style: solid;
     box-shadow: 
-      0 16px 48px 0 rgba(0, 0, 0, 0.7),
-      0 0 35px rgba(255, 255, 255, 0.12),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.25);
-    transform: scale(1.004);
+      0 20px 48px -10px rgba(0, 0, 0, 0.7),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.35);
+  }
+
+  .glass-dropzone-dragover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%);
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    box-shadow: 
+      0 25px 60px 0 rgba(0, 0, 0, 0.8),
+      0 0 45px rgba(255, 255, 255, 0.18),
+      inset 0 1px 2px 0 rgba(255, 255, 255, 0.45);
+    transform: scale(1.008);
   }
 
   .glass-modal {
-    background: rgba(10, 10, 12, 0.88);
-    backdrop-filter: blur(40px) saturate(190%);
-    -webkit-backdrop-filter: blur(40px) saturate(190%);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(14, 14, 18, 0.85);
+    backdrop-filter: blur(48px) saturate(210%);
+    -webkit-backdrop-filter: blur(48px) saturate(210%);
+    border: 1px solid rgba(255, 255, 255, 0.16);
     box-shadow: 
-      0 30px 70px -10px rgba(0, 0, 0, 0.9),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+      0 35px 80px -15px rgba(0, 0, 0, 0.95),
+      0 0 40px rgba(255, 255, 255, 0.05),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.3);
   }
 
   .liquid-btn-primary {
-    background: #ffffff;
+    background: linear-gradient(180deg, #ffffff 0%, #e6e6e6 100%);
     color: #000000;
     border: 1px solid #ffffff;
     box-shadow: 
-      0 2px 10px rgba(255, 255, 255, 0.2),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+      0 4px 14px rgba(255, 255, 255, 0.22),
+      0 1px 2px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 0 #ffffff;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .liquid-btn-primary:hover {
-    background: #f2f2f2;
+    background: linear-gradient(180deg, #f7f7f7 0%, #dedede 100%);
     box-shadow: 
-      0 4px 18px rgba(255, 255, 255, 0.35),
+      0 6px 20px rgba(255, 255, 255, 0.35),
+      0 2px 4px rgba(0, 0, 0, 0.25),
       inset 0 1px 0 0 #ffffff;
     transform: translateY(-0.5px);
   }
@@ -132,16 +150,16 @@
 
 /* Minimalist Apple scrollbar */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.16);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.35);
 }

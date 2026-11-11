@@ -57,6 +57,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_cache_control_headers(request, call_next):
+    response = await call_next(request)
+    # Prevent aggressive browser caching of frontend index.html and root page
+    if request.url.path == "/" or request.url.path.endswith(".html"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # Attach API routes
 app.include_router(router)
 
