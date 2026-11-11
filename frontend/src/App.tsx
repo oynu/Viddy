@@ -72,27 +72,24 @@ export const App: React.FC = () => {
     fetchVideos();
     fetchChannels();
     fetchQueueStatus();
-
     const interval = setInterval(() => {
-      fetchVideos();
       fetchQueueStatus();
-    }, 2500);
-
+      fetchVideos();
+    }, 4000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleFileUpload = async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
-
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
     setIsUploading(true);
-    showNotification(`Importing ${fileList.length} video(s)... Generating viral captions & hashtags...`);
+    showNotification(`Importing ${files.length} video(s)... Transcribing & crafting viral hooks.`);
 
     const formData = new FormData();
-    for (let i = 0; i < fileList.length; i++) {
-      formData.append('files', fileList[i]);
+    for (let i = 0; i < files.length; i++) {
+      formData.append('files', files[i]);
     }
     formData.append('destination', destination);
-    formData.append('auto_publish', autoPublishOnDrop ? 'true' : 'false');
+    formData.append('auto_publish', String(autoPublishOnDrop));
 
     try {
       const res = await fetch('/api/videos/upload', {
@@ -101,18 +98,14 @@ export const App: React.FC = () => {
       });
       const data = await res.json();
       if (data.success) {
-        if (autoPublishOnDrop) {
-          showNotification(`🚀 ${data.count} video(s) imported & publishing to ${destination.toUpperCase()} now!`);
-        } else {
-          showNotification(`✓ ${data.count} video(s) imported with viral captions & hashtags ready!`);
-        }
+        showNotification(data.message || `Successfully imported ${data.count} videos.`);
         await fetchVideos();
         await fetchQueueStatus();
       } else {
-        showNotification(data.message || 'Upload failed.');
+        showNotification(data.error || 'Failed to import videos.');
       }
-    } catch (e: any) {
-      showNotification('Error importing videos: ' + e.message);
+    } catch (e) {
+      showNotification('Error uploading videos.');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -243,21 +236,27 @@ export const App: React.FC = () => {
   const pendingVideos = videos.filter(v => v.status === 'ready' || v.status === 'queued' || v.status === 'failed');
 
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-white selection:text-black font-sans antialiased">
-      {/* Toast Notification */}
+    <div className="min-h-screen text-white selection:bg-white selection:text-black font-sans antialiased relative overflow-x-hidden">
+      {/* Ambient Top Glow Layer */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[360px] bg-gradient-to-b from-white/[0.05] via-white/[0.015] to-transparent blur-3xl pointer-events-none -z-10" />
+
+      {/* Apple-Style Liquid Glass Toast Notification */}
       {notification && (
-        <div className="fixed top-5 right-5 z-50 bg-white text-black px-4 py-2.5 rounded shadow-2xl text-xs font-mono flex items-center gap-2">
-          <Check className="w-4 h-4 text-black" />
-          <span>{notification}</span>
+        <div className="fixed top-6 right-6 z-50 glass-modal px-4 py-2.5 rounded-full text-xs font-medium flex items-center gap-2.5 shadow-2xl border border-white/20 animate-in fade-in slide-in-from-top-2 duration-200">
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+          <span className="text-white tracking-tight">{notification}</span>
         </div>
       )}
 
-      {/* Top Minimal Header */}
-      <header className="border-b border-[#1c1c1c] px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Floating Frosted Glass Header */}
+      <header className="sticky top-0 z-40 backdrop-blur-2xl bg-black/40 border-b border-white/[0.08] px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
         <div className="flex items-center gap-3">
-          <span className="font-mono text-base tracking-widest font-black uppercase text-white">VIDDY</span>
-          <span className="text-xs text-[#444] font-mono">/</span>
-          <span className="text-xs text-[#888] font-medium tracking-tight">Auto-Video Publisher</span>
+          <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-black font-black text-xs shadow-md">
+            V
+          </div>
+          <span className="font-mono text-sm tracking-widest font-black uppercase text-white">VIDDY</span>
+          <span className="text-xs text-zinc-600 font-mono">/</span>
+          <span className="text-xs text-zinc-400 font-medium tracking-tight">Auto-Video Publisher</span>
         </div>
 
         {/* Platform Account Badges & Clear */}
@@ -265,26 +264,26 @@ export const App: React.FC = () => {
           {/* TikTok Pill */}
           <button
             onClick={channels.tiktok?.connected ? () => setShowChannelsModal(true) : handleLaunchBrowserTikTok}
-            className={`px-3 py-1.5 rounded text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer border ${
+            className={`px-3 py-1.5 rounded-full text-xs font-mono flex items-center gap-2 transition-all cursor-pointer ${
               channels.tiktok?.connected
-                ? 'bg-[#111] text-white border-[#333] hover:border-white'
-                : 'bg-white text-black font-semibold border-white hover:bg-[#eaeaea]'
+                ? 'glass-pill text-white border-white/20 hover:border-white/40'
+                : 'liquid-btn-primary font-semibold'
             }`}
           >
-            <span className={`w-2 h-2 rounded-full ${channels.tiktok?.connected ? 'bg-white' : 'bg-black'}`} />
+            <span className={`w-2 h-2 rounded-full ${channels.tiktok?.connected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-black'}`} />
             <span>{channels.tiktok?.connected ? `TikTok (${browserName} Active)` : `Connect TikTok in ${browserName}`}</span>
           </button>
 
           {/* YouTube Shorts Pill */}
           <button
             onClick={() => setShowChannelsModal(true)}
-            className={`px-3 py-1.5 rounded text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer border ${
+            className={`px-3 py-1.5 rounded-full text-xs font-mono flex items-center gap-2 transition-all cursor-pointer glass-pill ${
               channels.youtube?.connected
-                ? 'bg-[#111] text-white border-[#333] hover:border-white'
-                : 'bg-[#141414] text-[#777] border-[#262626] hover:text-white'
+                ? 'text-white border-white/20 hover:border-white/40'
+                : 'text-zinc-400 hover:text-white border-white/[0.06]'
             }`}
           >
-            <span className={`w-2 h-2 rounded-full ${channels.youtube?.connected ? 'bg-white' : 'bg-[#555]'}`} />
+            <span className={`w-2 h-2 rounded-full ${channels.youtube?.connected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-zinc-600'}`} />
             <span>{channels.youtube?.connected ? 'Shorts API (Active)' : 'Connect YouTube'}</span>
           </button>
 
@@ -292,7 +291,7 @@ export const App: React.FC = () => {
             <button
               onClick={handleClearAll}
               title="Clear all videos"
-              className="p-1.5 rounded bg-black border border-[#262626] hover:border-[#666] text-[#666] hover:text-[#f87171] transition-all cursor-pointer"
+              className="p-2 rounded-full glass-pill hover:border-rose-500/40 text-zinc-400 hover:text-rose-400 transition-all cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -303,12 +302,12 @@ export const App: React.FC = () => {
       {/* Main Container */}
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-8">
         
-        {/* Destination Picker */}
+        {/* Destination Picker Segmented Control */}
         <div className="flex items-center justify-between">
-          <span className="text-xs font-mono uppercase tracking-wider text-[#777]">
+          <span className="text-xs font-mono uppercase tracking-wider text-zinc-500">
             Upload Target
           </span>
-          <div className="flex items-center gap-2">
+          <div className="p-1 rounded-full bg-white/[0.03] border border-white/[0.08] backdrop-blur-xl flex items-center gap-1 shadow-inner">
             {[
               { id: 'tiktok', label: `TikTok (${browserName})` },
               { id: 'youtube', label: 'YouTube Shorts' },
@@ -317,10 +316,10 @@ export const App: React.FC = () => {
               <button
                 key={p.id}
                 onClick={() => setDestination(p.id as any)}
-                className={`px-3 py-1.5 rounded text-xs font-medium border transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer ${
                   destination === p.id
-                    ? 'bg-white text-black border-white font-semibold'
-                    : 'bg-[#0f0f0f] text-[#888] border-[#222] hover:border-[#444] hover:text-white'
+                    ? 'glass-pill-active font-semibold shadow-md'
+                    : 'text-zinc-400 hover:text-white font-medium hover:bg-white/[0.04]'
                 }`}
               >
                 {p.label}
@@ -329,7 +328,7 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* The Core Upload / Drop Box */}
+        {/* Apple-Style Liquid Glass Drop Box */}
         <section
           onDragOver={(e) => {
             e.preventDefault();
@@ -341,10 +340,8 @@ export const App: React.FC = () => {
             setIsDragging(false);
             handleFileUpload(e.dataTransfer.files);
           }}
-          className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer ${
-            isDragging
-              ? 'border-white bg-[#141414]'
-              : 'border-[#262626] bg-[#0a0a0a] hover:border-[#444] hover:bg-[#0f0f0f]'
+          className={`rounded-3xl p-12 text-center transition-all cursor-pointer group relative overflow-hidden ${
+            isDragging ? 'glass-dropzone-dragover' : 'glass-dropzone hover:border-white/30'
           }`}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -352,31 +349,31 @@ export const App: React.FC = () => {
             ref={fileInputRef}
             type="file"
             multiple
-            accept="video/mp4,video/quicktime,video/webm,video/*"
+            accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/avi,video/*"
             className="hidden"
             onChange={(e) => handleFileUpload(e.target.files)}
           />
 
-          <div className="flex flex-col items-center justify-center space-y-3.5">
-            <div className="w-12 h-12 rounded-full bg-[#141414] border border-[#2a2a2a] flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.12] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] flex items-center justify-center group-hover:scale-105 transition-transform backdrop-blur-md">
               {isUploading ? (
                 <Loader2 className="w-6 h-6 text-white animate-spin" />
               ) : (
-                <UploadCloud className="w-6 h-6 text-white" />
+                <UploadCloud className="w-6 h-6 text-white group-hover:text-white transition-colors" />
               )}
             </div>
 
             <div>
-              <h2 className="text-base font-bold text-white tracking-tight">
+              <h2 className="text-base font-semibold text-white tracking-tight">
                 {isUploading ? 'Importing and crafting viral captions...' : 'Drop your videos here or click to import'}
               </h2>
-              <p className="text-xs text-[#777] mt-1 max-w-sm mx-auto">
-                Auto-transcribes the script, crafts retention captions & reach hashtags, and uploads to {destination.toUpperCase()}.
+              <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto leading-relaxed">
+                Auto-transcribes spoken audio, crafts retention hooks & reach hashtags, and uploads to {destination.toUpperCase()}.
               </p>
             </div>
 
             <div
-              className="inline-flex items-center gap-2 pt-2 text-xs font-mono text-[#aaa]"
+              className="inline-flex items-center gap-2 pt-2 text-xs font-mono text-zinc-400"
               onClick={(e) => e.stopPropagation()}
             >
               <input
@@ -384,9 +381,9 @@ export const App: React.FC = () => {
                 id="autoDropToggle"
                 checked={autoPublishOnDrop}
                 onChange={(e) => setAutoPublishOnDrop(e.target.checked)}
-                className="w-4 h-4 rounded bg-black border-[#444] text-white focus:ring-0 cursor-pointer"
+                className="w-4 h-4 rounded bg-black/60 border-white/20 text-white focus:ring-0 cursor-pointer accent-white"
               />
-              <label htmlFor="autoDropToggle" className="cursor-pointer select-none">
+              <label htmlFor="autoDropToggle" className="cursor-pointer select-none text-zinc-300 hover:text-white transition-colors">
                 ⚡ Auto-post immediately upon drop
               </label>
             </div>
@@ -396,14 +393,14 @@ export const App: React.FC = () => {
         {/* Batch Action Bar (if videos exist) */}
         {videos.length > 0 && (
           <div className="flex items-center justify-between pt-2">
-            <span className="text-xs font-mono text-[#777]">
+            <span className="text-xs font-mono text-zinc-500">
               {videos.length} video(s) · {videos.filter(v => v.status === 'published').length} published
             </span>
 
             {pendingVideos.length > 0 && (
               <button
                 onClick={handlePublishAll}
-                className="px-4 py-2 rounded bg-white text-black hover:bg-[#eaeaea] text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg"
+                className="px-4 py-2 rounded-full liquid-btn-primary text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg"
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
                 <span>Upload & Post All ({pendingVideos.length})</span>
@@ -412,32 +409,32 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* Video Cards */}
+        {/* Video Cards with Liquid Glass Styling */}
         {videos.length > 0 && (
           <div className="space-y-6">
             {videos.map(video => (
               <article
                 key={video.id}
-                className="border border-[#222] bg-[#0a0a0a] rounded-xl p-5 space-y-4 transition-all"
+                className="glass-card rounded-2xl p-6 space-y-4 relative overflow-hidden group"
               >
                 {/* Header: Title & Status */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono uppercase text-[#777]">
+                      <span className="text-[10px] font-mono uppercase text-zinc-500">
                         {video.duration ? `${video.duration.toFixed(1)}s` : 'Video'}
                       </span>
 
                       {/* Status Tag */}
                       <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase ${
+                        className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full border uppercase backdrop-blur-md ${
                           video.status === 'published'
-                            ? 'bg-[#0f2913] text-[#4ade80] border-[#166534]'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                             : video.status === 'publishing'
-                            ? 'bg-[#291b0f] text-[#fb923c] border-[#9a3412] animate-pulse'
+                            ? 'bg-amber-500/10 text-amber-300 border-amber-500/20 animate-pulse'
                             : video.status === 'failed'
-                            ? 'bg-[#290f0f] text-[#f87171] border-[#991b1b]'
-                            : 'bg-[#161616] text-[#aaa] border-[#333]'
+                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                            : 'bg-white/[0.04] text-zinc-400 border-white/[0.08]'
                         }`}
                       >
                         {video.status === 'published'
@@ -450,7 +447,7 @@ export const App: React.FC = () => {
                       </span>
                     </div>
 
-                    <h3 className="text-sm font-bold text-white tracking-tight">{video.title}</h3>
+                    <h3 className="text-sm font-semibold text-white tracking-tight">{video.title}</h3>
                   </div>
 
                   {/* Actions */}
@@ -462,7 +459,7 @@ export const App: React.FC = () => {
                             href="https://www.tiktok.com/tiktokstudio/manage"
                             target="_blank"
                             rel="noreferrer"
-                            className="px-3 py-1.5 rounded bg-white text-black hover:bg-[#eaeaea] text-xs font-semibold flex items-center gap-1.5 transition-all"
+                            className="px-3 py-1.5 rounded-full liquid-btn-primary text-xs font-semibold flex items-center gap-1.5 transition-all"
                           >
                             <span>TikTok Studio</span>
                             <ArrowUpRight className="w-3 h-3 text-black" />
@@ -473,7 +470,7 @@ export const App: React.FC = () => {
                             href={video.youtube_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="px-3 py-1.5 rounded bg-[#161616] text-white border border-[#333] hover:border-white text-xs font-medium flex items-center gap-1.5 transition-all"
+                            className="px-3 py-1.5 rounded-full glass-pill hover:border-white/30 text-xs font-medium flex items-center gap-1.5 transition-all"
                           >
                             <span>YouTube</span>
                             <ExternalLink className="w-3 h-3" />
@@ -484,7 +481,7 @@ export const App: React.FC = () => {
                       <button
                         onClick={() => handlePublishSingle(video.id)}
                         disabled={video.status === 'publishing'}
-                        className="px-3 py-1.5 rounded bg-white text-black hover:bg-[#eaeaea] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                        className="px-3.5 py-1.5 rounded-full liquid-btn-primary text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
                       >
                         <Play className="w-3 h-3 fill-current" />
                         <span>Post Now</span>
@@ -494,7 +491,7 @@ export const App: React.FC = () => {
                     <button
                       onClick={() => handleRegenerateMetadata(video.id)}
                       title="Regenerate viral caption and hashtags"
-                      className="p-1.5 rounded bg-black border border-[#2a2a2a] hover:border-white text-[#888] hover:text-white transition-all cursor-pointer"
+                      className="p-2 rounded-full glass-pill hover:border-white/30 text-zinc-400 hover:text-white transition-all cursor-pointer"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
                     </button>
@@ -502,7 +499,7 @@ export const App: React.FC = () => {
                     <button
                       onClick={() => handleDeleteVideo(video.id)}
                       title="Delete video"
-                      className="p-1.5 rounded bg-black border border-[#2a2a2a] hover:border-[#666] text-[#666] hover:text-[#f87171] transition-all cursor-pointer"
+                      className="p-2 rounded-full glass-pill hover:border-rose-500/40 text-zinc-400 hover:text-rose-400 transition-all cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -511,10 +508,10 @@ export const App: React.FC = () => {
 
                 {/* Video Preview */}
                 {video.video_path && (
-                  <div className="bg-black rounded border border-[#1a1a1a] flex justify-center p-2 relative">
+                  <div className="rounded-xl border border-white/[0.08] bg-black/60 flex justify-center p-2 relative overflow-hidden backdrop-blur-sm">
                     <video
                       controls
-                      className="max-h-64 w-auto rounded shadow-lg"
+                      className="max-h-64 w-auto rounded-lg shadow-xl"
                       src={`/media/${video.video_path.replace(/\\/g, '/').split('output/')[1] || 'uploads/video.mp4'}`}
                     />
                   </div>
@@ -522,19 +519,19 @@ export const App: React.FC = () => {
 
                 {/* Extracted Script */}
                 {video.script && (
-                  <div className="p-2.5 bg-black border border-[#1a1a1a] rounded text-xs space-y-1">
-                    <span className="font-mono text-[10px] uppercase text-[#666] block">
+                  <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl text-xs space-y-1 backdrop-blur-md">
+                    <span className="font-mono text-[10px] uppercase text-zinc-500 block">
                       Spoken Script
                     </span>
-                    <p className="text-[#999] text-xs leading-relaxed">{video.script}</p>
+                    <p className="text-zinc-300 text-xs leading-relaxed">{video.script}</p>
                   </div>
                 )}
 
                 {/* Viral Caption & Hashtags Box */}
                 {video.tiktok_hashtags && (
-                  <div className="p-3 bg-black border border-[#1f1f1f] rounded space-y-2 text-xs">
-                    <div className="flex items-center justify-between text-[#888]">
-                      <span className="font-mono text-[10px] uppercase text-white font-semibold flex items-center gap-1">
+                  <div className="p-3.5 bg-white/[0.025] border border-white/[0.08] rounded-xl space-y-2 text-xs backdrop-blur-md">
+                    <div className="flex items-center justify-between text-zinc-400">
+                      <span className="font-mono text-[10px] uppercase text-white font-semibold flex items-center gap-1.5">
                         <Hash className="w-3 h-3 text-white" />
                         <span>Viral Caption & Hashtags</span>
                       </span>
@@ -543,12 +540,12 @@ export const App: React.FC = () => {
                           const full = `${video.title}\n\n${video.tiktok_hashtags}`;
                           copyToClipboard(full, `cap-${video.id}`);
                         }}
-                        className="text-xs hover:text-white flex items-center gap-1 cursor-pointer font-mono"
+                        className="text-xs hover:text-white flex items-center gap-1.5 cursor-pointer font-mono text-zinc-400 transition-colors"
                       >
                         {copiedKey === `cap-${video.id}` ? (
                           <>
-                            <Check className="w-3 h-3 text-white" />
-                            <span className="text-white">Copied</span>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400">Copied</span>
                           </>
                         ) : (
                           <>
@@ -558,30 +555,30 @@ export const App: React.FC = () => {
                         )}
                       </button>
                     </div>
-                    <p className="text-[#ccc] text-xs font-mono select-all bg-[#0a0a0a] p-2 rounded border border-[#181818]">
-                      <span className="text-white font-bold">{video.title}</span>
+                    <p className="text-zinc-300 text-xs font-mono select-all bg-black/50 p-2.5 rounded-lg border border-white/[0.06] leading-relaxed">
+                      <span className="text-white font-semibold">{video.title}</span>
                       <br /><br />
-                      <span className="text-[#777]">{video.tiktok_hashtags}</span>
+                      <span className="text-zinc-400">{video.tiktok_hashtags}</span>
                     </p>
                   </div>
                 )}
 
                 {/* Pinned Discussion Comment */}
                 {video.tiktok_commentary && (
-                  <div className="p-3 bg-black border border-[#1f1f1f] rounded space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between text-[#888]">
-                      <span className="font-mono text-[10px] uppercase text-white font-semibold flex items-center gap-1">
+                  <div className="p-3.5 bg-white/[0.025] border border-white/[0.08] rounded-xl space-y-2 text-xs backdrop-blur-md">
+                    <div className="flex items-center justify-between text-zinc-400">
+                      <span className="font-mono text-[10px] uppercase text-white font-semibold flex items-center gap-1.5">
                         <MessageSquareQuote className="w-3 h-3 text-white" />
                         <span>TikTok Pinned Comment</span>
                       </span>
                       <button
                         onClick={() => copyToClipboard(video.tiktok_commentary, `comm-${video.id}`)}
-                        className="text-xs hover:text-white flex items-center gap-1 cursor-pointer font-mono"
+                        className="text-xs hover:text-white flex items-center gap-1.5 cursor-pointer font-mono text-zinc-400 transition-colors"
                       >
                         {copiedKey === `comm-${video.id}` ? (
                           <>
-                            <Check className="w-3 h-3 text-white" />
-                            <span className="text-white">Copied</span>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400">Copied</span>
                           </>
                         ) : (
                           <>
@@ -591,7 +588,7 @@ export const App: React.FC = () => {
                         )}
                       </button>
                     </div>
-                    <p className="text-white text-xs leading-relaxed font-mono select-all bg-[#0a0a0a] p-2 rounded border border-[#181818]">
+                    <p className="text-zinc-200 text-xs leading-relaxed font-mono select-all bg-black/50 p-2.5 rounded-lg border border-white/[0.06]">
                       {video.tiktok_commentary}
                     </p>
                   </div>
@@ -599,8 +596,8 @@ export const App: React.FC = () => {
 
                 {/* Error Banner */}
                 {video.error_message && video.status === 'failed' && (
-                  <div className="p-2.5 bg-[#1a0a0a] border border-[#3b1212] rounded text-xs text-[#f87171] flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 flex items-center gap-2 backdrop-blur-md">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                     <span>{video.error_message}</span>
                   </div>
                 )}
@@ -610,19 +607,19 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Platform Channel Connection Modal */}
+      {/* Apple-Style Liquid Glass Channel Connection Modal */}
       {showChannelsModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl max-w-lg w-full p-6 space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#222] pb-4">
-              <h3 className="text-sm font-bold tracking-tight text-white font-mono uppercase">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="glass-modal rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
+              <h3 className="text-sm font-semibold tracking-tight text-white font-mono uppercase">
                 Platform Accounts
               </h3>
               <button
                 onClick={() => setShowChannelsModal(false)}
-                className="text-[#666] hover:text-white text-xs font-mono cursor-pointer"
+                className="w-7 h-7 rounded-full glass-pill flex items-center justify-center text-zinc-400 hover:text-white text-xs font-mono cursor-pointer transition-colors"
               >
-                ✕ Close
+                ✕
               </button>
             </div>
 
@@ -630,8 +627,8 @@ export const App: React.FC = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-bold text-white block">TikTok ({browserName})</span>
-                  <span className="text-[11px] text-[#777]">
+                  <span className="text-xs font-semibold text-white block">TikTok ({browserName})</span>
+                  <span className="text-[11px] text-zinc-400">
                     {channels.tiktok?.connected
                       ? `Session saved in ${browserName}. Background uploads active.`
                       : `Log into TikTok once in ${browserName} to save your session.`}
@@ -641,7 +638,7 @@ export const App: React.FC = () => {
 
               <button
                 onClick={handleLaunchBrowserTikTok}
-                className="px-3.5 py-1.5 rounded bg-white text-black text-xs font-semibold hover:bg-[#eaeaea] cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 rounded-full liquid-btn-primary text-xs font-semibold cursor-pointer flex items-center gap-2 transition-all shadow-sm"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>{channels.tiktok?.connected ? `Re-open ${browserName} Login` : `Log In via ${browserName}`}</span>
@@ -649,11 +646,11 @@ export const App: React.FC = () => {
             </div>
 
             {/* YouTube Shorts */}
-            <div className="space-y-3 pt-4 border-t border-[#222]">
+            <div className="space-y-3 pt-4 border-t border-white/[0.08]">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-bold text-white block">YouTube Shorts</span>
-                  <span className="text-[11px] text-[#777]">
+                  <span className="text-xs font-semibold text-white block">YouTube Shorts</span>
+                  <span className="text-[11px] text-zinc-400">
                     {channels.youtube?.connected
                       ? 'OAuth credentials active.'
                       : 'Paste OAuth JSON or refresh token.'}
@@ -662,17 +659,17 @@ export const App: React.FC = () => {
               </div>
 
               {!channels.youtube?.connected && (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   <input
                     type="text"
                     placeholder="Paste youtube_token.json content or OAuth credentials..."
                     value={ytToken}
                     onChange={(e) => setYtToken(e.target.value)}
-                    className="w-full bg-black border border-[#2c2c2c] rounded px-3 py-1.5 text-xs text-white placeholder-[#555] font-mono focus:outline-none focus:border-white"
+                    className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 font-mono focus:outline-none focus:border-white/40 focus:bg-white/[0.05] transition-all"
                   />
                   <button
                     onClick={handleSaveYouTubeToken}
-                    className="px-3.5 py-1.5 rounded bg-white text-black text-xs font-semibold hover:bg-[#eaeaea] cursor-pointer"
+                    className="px-4 py-2 rounded-full liquid-btn-primary text-xs font-semibold cursor-pointer shadow-sm"
                   >
                     Save Token
                   </button>
