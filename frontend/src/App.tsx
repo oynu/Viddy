@@ -354,7 +354,7 @@ export const App: React.FC = () => {
           onClick={() => fileInputRef.current?.click()}
         >
           {/* Top specular highlight line */}
-          <div className="absolute top-0 left-1/4 right-1/4 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
+          <div className="absolute top-0 left-1/4 right-1/4 h-[1.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent pointer-events-none group-hover:via-white/80 transition-all duration-300" />
 
           <input
             ref={fileInputRef}
@@ -429,7 +429,7 @@ export const App: React.FC = () => {
                 className="glass-card rounded-2xl p-6 space-y-4 relative overflow-hidden group"
               >
                 {/* Top specular highlight line */}
-                <div className="absolute top-0 left-6 right-6 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
+                <div className="absolute top-0 left-6 right-6 h-[1.5px] bg-gradient-to-r from-transparent via-white/50 to-transparent pointer-events-none group-hover:via-white/70 transition-all duration-300" />
 
                 {/* Header: Title & Status */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
