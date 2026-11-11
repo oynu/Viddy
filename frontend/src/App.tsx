@@ -84,7 +84,7 @@ export const App: React.FC = () => {
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setIsUploading(true);
-    showNotification(`Importing ${files.length} video(s)... Transcribing & crafting viral hooks.`);
+    showNotification(`Importing ${files.length} video(s)...`);
 
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
@@ -175,11 +175,11 @@ export const App: React.FC = () => {
 
   const handleRegenerateMetadata = async (videoId: number) => {
     try {
-      showNotification('Regenerating viral caption & hashtags...');
+      showNotification('Regenerating caption & hashtags...');
       const res = await fetch(`/api/videos/${videoId}/auto-metadata`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        showNotification('Viral caption & reach hashtags updated!');
+        showNotification('Caption & hashtags updated!');
         await fetchVideos();
       }
     } catch (e) {
@@ -241,7 +241,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen text-white selection:bg-purple-500 selection:text-white font-sans antialiased relative overflow-x-hidden pb-24">
-      {/* 3D Volumetric Purple & Obsidian Liquid Glass Canvas */}
+      {/* Interactive 3D Liquid Glass & Playful Cursor Canvas */}
       <LiquidGlassCanvas />
 
       {/* Ambient Deep Purple & White Liquid Glow Spheres */}
@@ -260,7 +260,6 @@ export const App: React.FC = () => {
       {/* Floating Liquid Glass Header Capsule */}
       <div className="sticky top-5 z-40 max-w-4xl mx-auto px-4 w-full relative">
         <header className="glass-panel rounded-2xl px-5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all relative overflow-hidden">
-          {/* Top Specular Edge */}
           <div className="absolute top-0 left-10 right-10 h-[1px] bg-gradient-to-r from-transparent via-purple-300/60 to-transparent pointer-events-none" />
 
           <div className="flex items-center gap-3">
@@ -287,7 +286,6 @@ export const App: React.FC = () => {
 
           {/* Platform Account Badges & Clear */}
           <div className="flex items-center gap-2.5 flex-wrap">
-            {/* TikTok Pill */}
             <button
               onClick={
                 channels.tiktok?.connected
@@ -314,7 +312,6 @@ export const App: React.FC = () => {
               </span>
             </button>
 
-            {/* YouTube Shorts Pill */}
             <button
               onClick={() => setShowChannelsModal(true)}
               className={`px-3.5 py-1.5 rounded-full text-xs font-mono flex items-center gap-2 transition-all cursor-pointer glass-pill ${
@@ -363,7 +360,7 @@ export const App: React.FC = () => {
             {[
               { id: 'tiktok', label: `TikTok (${browserName})` },
               { id: 'youtube', label: 'YouTube Shorts' },
-              { id: 'both', label: 'Both Platforms' }
+              { id: 'both', label: 'Both' }
             ].map(p => (
               <button
                 key={p.id}
@@ -380,7 +377,7 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Liquid Glass Portal Drop Box */}
+        {/* Clean, Minimalist Liquid Glass Drop Box */}
         <section
           onDragOver={e => {
             e.preventDefault();
@@ -417,49 +414,24 @@ export const App: React.FC = () => {
             {/* 3D Levitating Liquid Orb Icon */}
             <div className="relative">
               <div className="absolute -inset-2 rounded-3xl bg-gradient-to-tr from-purple-500/40 via-fuchsia-400/20 to-white/30 blur-xl opacity-70 group-hover:opacity-100 transition-opacity duration-300" />
-              <div className="w-18 h-18 p-4 rounded-2xl bg-gradient-to-b from-white/[0.22] via-purple-500/[0.12] to-black/40 border border-white/[0.35] shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.6),inset_0_-1.5px_2px_rgba(168,85,247,0.4),0_16px_32px_rgba(0,0,0,0.6)] flex items-center justify-center group-hover:scale-105 group-hover:-translate-y-0.5 transition-all duration-300 backdrop-blur-xl relative">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-b from-white/[0.22] via-purple-500/[0.12] to-black/40 border border-white/[0.35] shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.6),inset_0_-1.5px_2px_rgba(168,85,247,0.4),0_16px_32px_rgba(0,0,0,0.6)] flex items-center justify-center group-hover:scale-105 group-hover:-translate-y-0.5 transition-all duration-300 backdrop-blur-xl relative">
                 {isUploading ? (
-                  <Loader2 className="w-8 h-8 text-purple-200 animate-spin" />
+                  <Loader2 className="w-7 h-7 text-purple-200 animate-spin" />
                 ) : (
-                  <UploadCloud className="w-8 h-8 text-white drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]" />
+                  <UploadCloud className="w-7 h-7 text-white drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]" />
                 )}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <h2 className="text-lg font-semibold text-white tracking-tight">
-                {isUploading
-                  ? 'Importing & crafting viral captions...'
-                  : 'Drop your videos here or click to import'}
-              </h2>
-              <p className="text-xs text-zinc-300/85 max-w-md mx-auto leading-relaxed">
-                Auto-transcribes spoken audio, crafts high-retention hooks & reach hashtags, and publishes directly to{' '}
-                <span className="text-purple-200 font-semibold font-mono">
-                  {destination.toUpperCase()}
-                </span>
-                .
-              </p>
-            </div>
+            <h2 className="text-base font-semibold text-white tracking-tight">
+              {isUploading
+                ? 'Importing your videos...'
+                : 'Drop your videos here or click to import'}
+            </h2>
 
-            {/* Feature Micro-Pills */}
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-              {[
-                'Whisper AI Transcription',
-                'Viral Hook Generator',
-                'Auto-Schedule & Upload'
-              ].map(badge => (
-                <span
-                  key={badge}
-                  className="px-3 py-1 rounded-full text-[11px] font-mono bg-white/[0.04] border border-purple-300/[0.18] text-purple-100/80 shadow-inner"
-                >
-                  ✦ {badge}
-                </span>
-              ))}
-            </div>
-
-            {/* Custom iOS-Style Liquid Glass Toggle Switch */}
+            {/* Custom Liquid Glass Toggle Switch */}
             <div
-              className="pt-2"
+              className="pt-1"
               onClick={e => {
                 e.stopPropagation();
                 setAutoPublishOnDrop(!autoPublishOnDrop);
@@ -495,7 +467,7 @@ export const App: React.FC = () => {
         {videos.length > 0 && (
           <div className="flex items-center justify-between pt-2 glass-panel px-5 py-3 rounded-2xl">
             <span className="text-xs font-mono text-purple-100/80">
-              {videos.length} video(s) in workspace ·{' '}
+              {videos.length} video(s) ·{' '}
               <span className="text-white font-semibold">
                 {videos.filter(v => v.status === 'published').length} published
               </span>
@@ -521,7 +493,6 @@ export const App: React.FC = () => {
                 key={video.id}
                 className="glass-card rounded-3xl p-6 space-y-4 relative overflow-hidden group"
               >
-                {/* Top Specular Highlight Line */}
                 <div className="absolute top-0 left-8 right-8 h-[1.5px] bg-gradient-to-r from-transparent via-purple-200/60 to-transparent pointer-events-none group-hover:via-white/90 transition-all duration-300" />
 
                 {/* Header: Title & Status */}
@@ -532,7 +503,6 @@ export const App: React.FC = () => {
                         {video.duration ? `${video.duration.toFixed(1)}s` : 'Video'}
                       </span>
 
-                      {/* Status Tag */}
                       <span
                         className={`text-[10px] font-mono px-3 py-0.5 rounded-full border uppercase backdrop-blur-md ${
                           video.status === 'published'
@@ -599,7 +569,7 @@ export const App: React.FC = () => {
 
                     <button
                       onClick={() => handleRegenerateMetadata(video.id)}
-                      title="Regenerate viral caption and hashtags"
+                      title="Regenerate caption and hashtags"
                       className="p-2 rounded-full glass-pill hover:border-purple-300/50 text-purple-200 hover:text-white transition-all cursor-pointer"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
@@ -639,13 +609,13 @@ export const App: React.FC = () => {
                   </div>
                 )}
 
-                {/* Viral Caption & Hashtags Box */}
+                {/* Caption & Hashtags Box */}
                 {video.tiktok_hashtags && (
                   <div className="p-4 bg-white/[0.04] border border-purple-300/[0.16] rounded-2xl space-y-2.5 text-xs backdrop-blur-md">
                     <div className="flex items-center justify-between text-zinc-300">
                       <span className="font-mono text-[10px] uppercase text-purple-200 font-semibold flex items-center gap-1.5">
                         <Hash className="w-3.5 h-3.5 text-purple-400" />
-                        <span>Viral Caption & Hashtags</span>
+                        <span>Caption & Hashtags</span>
                       </span>
                       <button
                         onClick={() => {
@@ -726,7 +696,6 @@ export const App: React.FC = () => {
       {showChannelsModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="glass-modal rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* Top Specular Highlight Line */}
             <div className="absolute top-0 left-8 right-8 h-[1.5px] bg-gradient-to-r from-transparent via-purple-300/70 to-transparent pointer-events-none" />
 
             <div className="flex items-center justify-between border-b border-white/[0.12] pb-4">
