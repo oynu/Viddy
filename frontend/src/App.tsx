@@ -13,6 +13,7 @@ import {
   Loader2,
   Play
 } from 'lucide-react';
+import { LiquidGlassCanvas } from './components/LiquidGlassCanvas';
 
 export const App: React.FC = () => {
   const [videos, setVideos] = useState<any[]>([]);
@@ -237,6 +238,9 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen text-white selection:bg-white selection:text-black font-sans antialiased relative overflow-x-hidden pb-20">
+      {/* 3D Depth Field & Interactive Cursor Light Trail Canvas */}
+      <LiquidGlassCanvas />
+
       {/* Apple Ambient Liquid Glass Glow Spheres */}
       <div className="fixed -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-gradient-to-b from-white/[0.12] to-transparent rounded-full blur-[120px] pointer-events-none -z-10" />
       <div className="fixed top-1/4 -left-36 w-[550px] h-[550px] bg-white/[0.04] rounded-full blur-[110px] pointer-events-none -z-10" />
@@ -251,7 +255,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Floating Cupertino Glass Header Capsule */}
-      <div className="sticky top-4 z-40 max-w-4xl mx-auto px-4 w-full">
+      <div className="sticky top-4 z-40 max-w-4xl mx-auto px-4 w-full relative">
         <header className="glass-panel rounded-2xl px-5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-white to-zinc-300 flex items-center justify-center text-black font-black text-xs shadow-md border border-white/40">
@@ -304,7 +308,7 @@ export const App: React.FC = () => {
       </div>
 
       {/* Main Container */}
-      <main className="max-w-3xl mx-auto px-6 pt-8 space-y-8">
+      <main className="max-w-3xl mx-auto px-6 pt-8 space-y-8 relative z-10">
         
         {/* Destination Picker Segmented Control */}
         <div className="flex items-center justify-between">
