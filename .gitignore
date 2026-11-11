@@ -1,17 +1,46 @@
+# Virtual environments
 .venv/
+venv/
+env/
+
+# Python artifacts
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
 .pytest_cache/
 .coverage
+htmlcov/
+
+# Node / Frontend
 node_modules/
 dist/
 build/
+.npm
+
+# Credentials and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+client_secret*.json
+credentials*.json
+*token*.json
+*cookies*.json
+
+# Runtime Data & Media Outputs
+data/
 output/
-*.db
+temp/
+logs/
+*.log
 *.sqlite
 *.sqlite3
-.env
+*.db
+
+# OS & Editor caches
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
 .superpowers/
-temp/
-data/
