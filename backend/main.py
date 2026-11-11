@@ -36,9 +36,8 @@ async def lifespan(app: FastAPI):
         # Unconditionally recover any abandoned jobs or orphaned states
         worker.recovery_mgr.recover_interrupted_jobs(session)
         st = crud.get_settings(session)
-        # By default in continuous autonomous mode: auto-start unless specifically paused
-        if st.running_mode != "paused":
-            asyncio.create_task(worker.start())
+        # Autonomous generator is stopped by default; user uploads and publishes videos on demand
+        pass
     yield
     # Shutdown: cleanly stop in-memory tasks without resetting continuous mode in DB
     await worker.stop(persist=False)

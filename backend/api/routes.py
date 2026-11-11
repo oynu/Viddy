@@ -376,6 +376,18 @@ def delete_video_endpoint(video_id: int):
         session.commit()
         return {"success": True, "message": f"Video {video_id} deleted"}
 
+@router.post("/videos/clear")
+def clear_all_videos_endpoint():
+    from backend.publishing.publish_queue import get_publish_queue
+    queue = get_publish_queue()
+    queue.stop()
+    queue.clear()
+    with get_db() as session:
+        session.query(JobModel).delete()
+        deleted = session.query(VideoModel).delete()
+        session.commit()
+    return {"success": True, "message": f"Cleared {deleted} videos from studio."}
+
 @router.patch("/videos/{video_id}")
 def update_video_endpoint(video_id: int, req: VideoUpdateRequest):
     with get_db() as session:

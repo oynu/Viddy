@@ -12,7 +12,7 @@ class SettingModel(Base):
     __tablename__ = "settings"
     
     id = Column(Integer, primary_key=True, default=1)
-    running_mode = Column(String(50), default="continuous")  # continuous, limited, paused, stopped
+    running_mode = Column(String(50), default="stopped")  # stopped, continuous, limited, paused
     publish_destination = Column(String(50), default="tiktok")  # tiktok, youtube, both, local
     max_daily_videos = Column(Integer, default=24)
     daily_videos_produced = Column(Integer, default=0)
